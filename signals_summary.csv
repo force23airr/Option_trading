@@ -1,0 +1,9 @@
+Ticker,Date,Signal,Close
+CRCL,2026-03-09,Golden Cross (20>50),111.84
+CRCL,2026-03-09,Bearish Divergence,111.84
+CRCL,2026-03-16,Bearish Divergence,125.83
+CRCL,Latest,RSI=57.4 | 52W_Hi=nan | 52W_Lo=nan,107.46
+COIN,2026-03-17,Bearish Divergence,210.23
+COIN,2026-03-24,Golden Cross (20>50),181.04
+COIN,Latest,RSI=61.2 | 52W_Hi=444.65 | 52W_Lo=139.36,199.82
+HOOD,Latest,RSI=66.4 | 52W_Hi=153.86 | 52W_Lo=39.21,86.85
