@@ -25,6 +25,8 @@ class DataContext:
     rv60: float | None = None
     risk_free_rate: float = 0.045
     macro_df: pd.DataFrame | None = None
+    yield_curve: pd.DataFrame | None = None
+    yield_summary: dict | None = None
     news: list[dict] = field(default_factory=list)
     earnings_date: date | None = None
 
@@ -35,6 +37,10 @@ class DataContext:
     @property
     def has_macro(self) -> bool:
         return self.macro_df is not None and not self.macro_df.empty
+
+    @property
+    def has_rates(self) -> bool:
+        return self.yield_curve is not None and not self.yield_curve.empty
 
     @property
     def has_news(self) -> bool:

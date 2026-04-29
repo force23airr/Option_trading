@@ -7,6 +7,7 @@ from .volatility_analyst import VolatilityAnalyst
 from .mean_reversion_analyst import MeanReversionAnalyst
 from .options_analyst import OptionsAnalyst
 from .quant_strategist import QuantStrategist
+from .macro_rates_analyst import MacroRatesAnalyst
 
 __all__ = [
     "AnalystView",
@@ -18,4 +19,5 @@ __all__ = [
     "MeanReversionAnalyst",
     "OptionsAnalyst",
     "QuantStrategist",
+    "MacroRatesAnalyst",
 ]

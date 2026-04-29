@@ -25,6 +25,7 @@ import pandas as pd
 from ..analysts import (
     AnalystView,
     BaseAnalyst,
+    MacroRatesAnalyst,
     MeanReversionAnalyst,
     OptionsAnalyst,
     PatternAnalyst,
@@ -37,7 +38,7 @@ from ..analysts.options_analyst import summarize_chain
 from . import black_scholes as bs
 from . import data, llm, options as opt, signals
 from .context import DataContext
-from ..data import opra_source
+from ..data import macro_source, opra_source
 
 
 # Order matters only for display
@@ -47,6 +48,7 @@ ALL_ANALYST_CLASSES: list[type[BaseAnalyst]] = [
     VolumeAnalyst,
     VolatilityAnalyst,
     MeanReversionAnalyst,
+    MacroRatesAnalyst,
     OptionsAnalyst,
 ]
 # Quant Strategist is run separately (single-pass, after the debate)
@@ -65,9 +67,11 @@ class SwarmResult:
 
 
 def _run_analyst_view(a: BaseAnalyst, ctx: DataContext, peer_views) -> AnalystView:
-    """Dispatch — Options/Quant analysts have specialized entry points."""
+    """Dispatch — analysts that need extra context have specialized entry points."""
     if isinstance(a, OptionsAnalyst):
         return a.analyze_with_chain(ctx.ticker, ctx.df, ctx.snap, ctx.chain_summary, peer_views=peer_views)
+    if isinstance(a, MacroRatesAnalyst):
+        return a.analyze_with_rates(ctx, peer_views=peer_views)
     return a.analyze(ctx.ticker, ctx.df, ctx.snap, peer_views=peer_views)
 
 
@@ -131,7 +135,7 @@ Produce a single consensus call. Reply with one JSON object and nothing else:
     return _parse_json_reply(raw) or {"raw": raw}
 
 
-def _build_context(ticker: str, days: int, with_options: bool, emit) -> DataContext:
+def _build_context(ticker: str, days: int, with_options: bool, with_rates: bool, emit) -> DataContext:
     emit("data:start", ticker=ticker, days=days)
     df = signals.add_indicators(data.fetch_ohlcv(ticker, days=days))
     if df.empty:
@@ -157,6 +161,19 @@ def _build_context(ticker: str, days: int, with_options: bool, emit) -> DataCont
         except Exception as exc:
             emit("options:error", error=str(exc))
 
+    if with_rates:
+        emit("rates:start")
+        try:
+            curve = macro_source.fetch_yield_curve()
+            if not curve.empty:
+                ctx.yield_curve = curve
+                ctx.yield_summary = macro_source.yield_curve_summary(curve)
+                emit("rates:done", summary=ctx.yield_summary)
+            else:
+                emit("rates:empty")
+        except Exception as exc:
+            emit("rates:error", error=str(exc))
+
     return ctx
 
 
@@ -166,6 +183,7 @@ def run(
     analyst_classes: list[type[BaseAnalyst]] | None = None,
     do_debate: bool = True,
     with_options: bool = False,
+    with_rates: bool = False,
     with_quant: bool = True,
     on_event=None,
 ) -> SwarmResult:
@@ -179,7 +197,7 @@ def run(
         if on_event:
             on_event(et, payload)
 
-    ctx = _build_context(ticker, days, with_options, emit)
+    ctx = _build_context(ticker, days, with_options, with_rates, emit)
 
     classes = analyst_classes or ALL_ANALYST_CLASSES
     spawned: list[BaseAnalyst] = []

@@ -29,6 +29,16 @@ def _print_event(et: str, payload: dict) -> None:
         print("   chain empty (off-hours?) — Options analysts will be skipped")
     elif et == "options:error":
         print(f"   options fetch failed: {payload['error']}")
+    elif et == "rates:start":
+        print(f"📡 fetching Treasury yield curve...")
+    elif et == "rates:done":
+        s = payload['summary']
+        print(f"   3M={s.get('3M', '?'):.2f}%  5Y={s.get('5Y', '?'):.2f}%  10Y={s.get('10Y', '?'):.2f}%  30Y={s.get('30Y', '?'):.2f}%")
+        print(f"   2s10s={s.get('spread_5y10y_bps', 0):+.0f}bps  10y Δ30d={s.get('chg_10y_30d_bps', 0):+.0f}bps")
+    elif et == "rates:empty":
+        print("   yield curve unavailable")
+    elif et == "rates:error":
+        print(f"   rates fetch failed: {payload['error']}")
     elif et == "spawn:done":
         print(f"\n🧬 SPAWNED {len(payload['spawned'])} analyst(s):")
         for name, prov, model in payload["spawned"]:
@@ -85,6 +95,7 @@ def main():
     ap.add_argument("--days", type=int, default=180)
     ap.add_argument("--no-debate", action="store_true", help="skip round-2 debate")
     ap.add_argument("--with-options", action="store_true", help="pull live OPRA chain (~$0.18) and add Options analysts")
+    ap.add_argument("--with-rates", action="store_true", help="pull Treasury yield curve (3M/5Y/10Y/30Y) and add Macro Rates Analyst")
     ap.add_argument("--no-quant", action="store_true", help="skip the Quant Strategist (DeepSeek-R1) power agent")
     ap.add_argument("--provider", help="default LLM provider (anthropic|deepseek|openai|openrouter)")
     ap.add_argument("--model", help="default LLM model")
@@ -102,6 +113,7 @@ def main():
         days=args.days,
         do_debate=not args.no_debate,
         with_options=args.with_options,
+        with_rates=args.with_rates,
         with_quant=not args.no_quant,
         on_event=_print_event,
     )
