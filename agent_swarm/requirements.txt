@@ -1,5 +1,7 @@
 anthropic>=0.50.0
 yfinance>=0.2.40
+databento>=0.40
+python-dotenv>=1.0
 pandas>=2.0
 numpy>=1.24
 streamlit>=1.30

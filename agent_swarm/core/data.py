@@ -1,18 +1,33 @@
 """Market data fetchers.
 
-Pulls OHLCV + headlines + macro context used by every agent. Wraps yfinance
-for now; swap in a paid feed (Polygon, Tiingo) later by keeping this the
-single source of price/news data.
+OHLCV comes from Databento by default (set DATABENTO_API_KEY); falls back to
+yfinance if the key is missing or the call fails. News + macro still wrap
+yfinance for now.
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 
 import pandas as pd
 import yfinance as yf
 
+from ..data import databento_source
 
-def fetch_ohlcv(ticker: str, days: int = 365) -> pd.DataFrame:
+
+def fetch_ohlcv(ticker: str, days: int = 365, source: str | None = None) -> pd.DataFrame:
+    source = source or os.environ.get("OHLCV_SOURCE", "databento")
+    if source == "databento":
+        try:
+            df = databento_source.fetch_ohlcv(ticker, days=days)
+            if not df.empty:
+                return df
+        except Exception as exc:
+            print(f"[data] databento fetch failed ({exc}); falling back to yfinance")
+    return _fetch_ohlcv_yf(ticker, days=days)
+
+
+def _fetch_ohlcv_yf(ticker: str, days: int = 365) -> pd.DataFrame:
     end = datetime.today()
     start = end - timedelta(days=days)
     df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
