@@ -9,3 +9,6 @@ class TrendAnalyst(BaseAnalyst):
         "alignment, slope, swing-high/swing-low structure, and proximity to 52-week extremes. "
         "Ignore short-term noise; ignore mean-reversion setups."
     )
+    # DeepSeek V3 — structured TA reads cheaply and well
+    provider = "deepseek"
+    model = "deepseek-chat"

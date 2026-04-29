@@ -4,16 +4,24 @@ Every analyst follows the same shape: take a packaged context (price df,
 indicator snapshot, optional peer-views in round 2), call an LLM, return a
 structured AnalystView. Provider/model is chosen per analyst so the swarm can
 mix Claude + DeepSeek + others.
+
+Conditional spawning: each analyst declares `should_spawn(ctx)`. The swarm
+only instantiates analysts whose data dependencies are present in the
+DataContext.
 """
 from __future__ import annotations
 
 import json
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from ..core import llm
+
+if TYPE_CHECKING:
+    from ..core.context import DataContext
 
 
 @dataclass
@@ -60,6 +68,14 @@ class BaseAnalyst:
     system_prompt: str = "You are a careful, evidence-driven equity analyst."
     provider: str | None = None  # None = use env default
     model: str | None = None
+
+    @classmethod
+    def should_spawn(cls, ctx: "DataContext") -> bool:
+        """Whether this analyst should be instantiated given available data.
+        Default: spawn unconditionally (chart analysts only need OHLCV).
+        Override in subclasses that need optional data (options, news, macro).
+        """
+        return True
 
     def _build_prompt(self, ticker: str, df: pd.DataFrame, snap: dict, peer_views: list[AnalystView] | None) -> str:
         peers_block = ""

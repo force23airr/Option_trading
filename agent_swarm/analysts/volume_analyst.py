@@ -9,3 +9,5 @@ class VolumeAnalyst(BaseAnalyst):
         "supported by volume. Look for: volume on up-days vs down-days, climax volume, "
         "volume dry-ups before breakouts, divergence between price action and volume."
     )
+    provider = "deepseek"
+    model = "deepseek-chat"

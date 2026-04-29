@@ -74,6 +74,12 @@ class OptionsAnalyst(BaseAnalyst):
         "structure choices: long calls/puts (debit), credit spreads, iron condors, calendars, "
         "diagonals. You never pick a structure that's misaligned with the vol regime."
     )
+    provider = "deepseek"
+    model = "deepseek-chat"
+
+    @classmethod
+    def should_spawn(cls, ctx) -> bool:
+        return ctx.has_options
 
     def analyze_with_chain(
         self,

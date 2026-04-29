@@ -10,3 +10,5 @@ class VolatilityAnalyst(BaseAnalyst):
         "vol regime into options-trader language (premium-rich vs premium-cheap, debit vs "
         "credit structures preferred)."
     )
+    provider = "deepseek"
+    model = "deepseek-chat"

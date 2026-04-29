@@ -9,3 +9,5 @@ class MeanReversionAnalyst(BaseAnalyst):
         "stretched distance from MA20, exhaustion candles. You do NOT chase trends. If the "
         "name is not at an extreme, your honest answer is 'neutral, no setup'."
     )
+    provider = "deepseek"
+    model = "deepseek-chat"

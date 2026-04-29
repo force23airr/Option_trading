@@ -1,8 +1,8 @@
 """Run the pattern-analysis swarm on one ticker, with live event printing.
 
     python -m agent_swarm.tools.run_swarm COIN
-    python -m agent_swarm.tools.run_swarm COIN --days 120 --no-debate
-    python -m agent_swarm.tools.run_swarm COIN --provider deepseek
+    python -m agent_swarm.tools.run_swarm COIN --days 365 --with-options
+    python -m agent_swarm.tools.run_swarm COIN --no-quant         # skip the power agent
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import json
 import os
 
 from agent_swarm.core import swarm
+from agent_swarm.tools import report as report_module
 
 
 def _print_event(et: str, payload: dict) -> None:
@@ -25,17 +26,35 @@ def _print_event(et: str, payload: dict) -> None:
         spread = payload['iv_rv_spread'] * 100
         print(f"   {payload['contracts']} contracts  IV-RV spread {spread:+.1f}pts")
     elif et == "options:empty":
-        print("   chain empty (off-hours?) — skipping Options Analyst")
+        print("   chain empty (off-hours?) — Options analysts will be skipped")
     elif et == "options:error":
         print(f"   options fetch failed: {payload['error']}")
+    elif et == "spawn:done":
+        print(f"\n🧬 SPAWNED {len(payload['spawned'])} analyst(s):")
+        for name, prov, model in payload["spawned"]:
+            print(f"   • {name:<24}  →  {prov}/{model}")
+        if payload["skipped"]:
+            print(f"   skipped:")
+            for s in payload["skipped"]:
+                print(f"   ✗ {s['name']:<24}  ({s['reason']})")
     elif et == "round:start":
         print(f"\n🧠 ROUND {payload['round']}: {', '.join(payload['analysts'])}")
     elif et == "analyst:view":
         v = payload["view"]
-        line = f"   [{v.analyst:<24}] {v.stance:<8} {v.confidence:>4.0%}  {v.summary}"
+        line = f"   [{v.analyst:<22}] {v.stance:<8} {v.confidence:>4.0%}  {v.summary}"
         if v.pattern:
-            line += f"   pattern={v.pattern!r}"
+            line += f"   → {v.pattern!r}"
         print(line)
+    elif et == "quant:start":
+        print(f"\n⚡ QUANT STRATEGIST  (DeepSeek-R1 reasoning)...")
+    elif et == "quant:done":
+        v = payload["view"]
+        print(f"   📋 TRADE TICKET")
+        print(f"   {v.summary}")
+        for o in v.observations[:8]:
+            print(f"     • {o}")
+    elif et == "quant:error":
+        print(f"   quant strategist failed: {payload['error']}")
     elif et == "coordinator:start":
         print("\n🎯 coordinator synthesizing...")
     elif et == "coordinator:done":
@@ -65,10 +84,12 @@ def main():
     ap.add_argument("ticker")
     ap.add_argument("--days", type=int, default=180)
     ap.add_argument("--no-debate", action="store_true", help="skip round-2 debate")
-    ap.add_argument("--with-options", action="store_true", help="pull live OPRA chain (~$0.18) and add Options Analyst")
+    ap.add_argument("--with-options", action="store_true", help="pull live OPRA chain (~$0.18) and add Options analysts")
+    ap.add_argument("--no-quant", action="store_true", help="skip the Quant Strategist (DeepSeek-R1) power agent")
     ap.add_argument("--provider", help="default LLM provider (anthropic|deepseek|openai|openrouter)")
     ap.add_argument("--model", help="default LLM model")
-    ap.add_argument("--save-json", help="path to write full result as JSON")
+    ap.add_argument("--save-json", help="path to write full result as JSON (overrides auto-save)")
+    ap.add_argument("--no-report", action="store_true", help="skip the auto-generated .txt report")
     args = ap.parse_args()
 
     if args.provider:
@@ -81,19 +102,33 @@ def main():
         days=args.days,
         do_debate=not args.no_debate,
         with_options=args.with_options,
+        with_quant=not args.no_quant,
         on_event=_print_event,
     )
 
+    result_dict = {
+        "ticker": result.ticker,
+        "snapshot": result.snapshot,
+        "spawned": result.spawned,
+        "skipped": result.skipped,
+        "round1": [v.__dict__ for v in result.round1],
+        "round2": [v.__dict__ for v in result.round2],
+        "quant": result.quant.__dict__ if result.quant else None,
+        "consensus": result.consensus,
+    }
+
     if args.save_json:
         with open(args.save_json, "w") as f:
-            json.dump({
-                "ticker": result.ticker,
-                "snapshot": result.snapshot,
-                "round1": [v.__dict__ for v in result.round1],
-                "round2": [v.__dict__ for v in result.round2],
-                "consensus": result.consensus,
-            }, f, indent=2, default=str)
+            json.dump(result_dict, f, indent=2, default=str)
         print(f"\n💾 saved → {args.save_json}")
+
+    if not args.no_report:
+        paths = report_module.save_run_artifacts(
+            result_dict, ticker=result.ticker, consensus=result.consensus,
+        )
+        print(f"\n📄 report → {paths['txt']}")
+        print(f"💾 data   → {paths['json']}")
+        print(f"\n  open {paths['txt']}   # to read the full agent transcript")
 
 
 if __name__ == "__main__":

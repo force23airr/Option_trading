@@ -5,6 +5,8 @@ from .pattern_analyst import PatternAnalyst
 from .volume_analyst import VolumeAnalyst
 from .volatility_analyst import VolatilityAnalyst
 from .mean_reversion_analyst import MeanReversionAnalyst
+from .options_analyst import OptionsAnalyst
+from .quant_strategist import QuantStrategist
 
 __all__ = [
     "AnalystView",
@@ -14,4 +16,6 @@ __all__ = [
     "VolumeAnalyst",
     "VolatilityAnalyst",
     "MeanReversionAnalyst",
+    "OptionsAnalyst",
+    "QuantStrategist",
 ]
