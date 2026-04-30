@@ -2,6 +2,8 @@
 
 The main command is `agent_swarm.tools.run_swarm`. Everything else builds on top.
 
+> **Looking for "I have X data — what do I run?"** See [07-scenarios.md](07-scenarios.md) — a one-page lookup by data type.
+
 ## The simplest run
 
 ```

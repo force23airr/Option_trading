@@ -22,6 +22,7 @@ If you're doing this for the first time today, read in this order:
 | [04-pulling-data.md](how-to/04-pulling-data.md) | You just want raw data, not analysis |
 | [05-adding-a-data-source.md](how-to/05-adding-a-data-source.md) | You have a new API/CSV to plug in |
 | [06-providers-and-keys.md](how-to/06-providers-and-keys.md) | Setting up Anthropic / DeepSeek / Databento keys |
+| [07-scenarios.md](how-to/07-scenarios.md) | "I have data X — what command do I run?" — quick lookup |
 
 ## Reference (lookup)
 
