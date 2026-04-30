@@ -60,7 +60,16 @@ def summarize_chain(chain: pd.DataFrame, spot: float, rv30: float, rv60: float) 
 
     levels: list[dict] = []
     if "open_interest" in chain.columns:
-        for exp in oi_levels_mod.pick_top_expiries(chain, n=2):
+        expiries = list(oi_levels_mod.pick_top_expiries(chain, n=2))
+        # Always include the closest tradable expiry (DTE ≥ 7) — that's the
+        # one QuantStrategist.build_candidates picks, so its walls must be in
+        # the prompt or the quant flies blind on dealer positioning.
+        tradable = chain[(chain["dte"] >= 7) & (chain["dte"] <= 120)]
+        if not tradable.empty:
+            front = tradable.loc[tradable["dte"].idxmin(), "expiry"]
+            if front not in expiries:
+                expiries.insert(0, front)
+        for exp in expiries:
             d = oi_levels_mod.compute_oi_levels(chain, exp)
             if d:
                 levels.append(d)
