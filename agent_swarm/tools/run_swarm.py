@@ -39,6 +39,16 @@ def _print_event(et: str, payload: dict) -> None:
         print("   yield curve unavailable")
     elif et == "rates:error":
         print(f"   rates fetch failed: {payload['error']}")
+    elif et == "news:start":
+        print(f"📰 fetching headlines for {payload['ticker']}...")
+    elif et == "news:done":
+        ed = payload.get("earnings_date")
+        ed_str = f"  earnings {ed}" if ed else ""
+        print(f"   {payload['count']} headlines{ed_str}")
+    elif et == "news:empty":
+        print("   no headlines available — News Analyst will be skipped")
+    elif et == "news:error":
+        print(f"   news fetch failed: {payload['error']}")
     elif et == "spawn:done":
         print(f"\n🧬 SPAWNED {len(payload['spawned'])} analyst(s):")
         for name, prov, model in payload["spawned"]:
@@ -96,6 +106,7 @@ def main():
     ap.add_argument("--no-debate", action="store_true", help="skip round-2 debate")
     ap.add_argument("--with-options", action="store_true", help="pull live OPRA chain (~$0.18) and add Options analysts")
     ap.add_argument("--with-rates", action="store_true", help="pull Treasury yield curve (3M/5Y/10Y/30Y) and add Macro Rates Analyst")
+    ap.add_argument("--with-news", action="store_true", help="pull recent headlines + earnings date and add News Analyst (Claude)")
     ap.add_argument("--no-quant", action="store_true", help="skip the Quant Strategist (DeepSeek-R1) power agent")
     ap.add_argument("--deep", action="store_true", help="upgrade all DeepSeek analysts from V3 to R1 reasoning model — slower (3-6min) but deeper analysis")
     ap.add_argument("--provider", help="default LLM provider (anthropic|deepseek|openai|openrouter)")
@@ -115,6 +126,7 @@ def main():
         do_debate=not args.no_debate,
         with_options=args.with_options,
         with_rates=args.with_rates,
+        with_news=args.with_news,
         with_quant=not args.no_quant,
         deep=args.deep,
         on_event=_print_event,

@@ -27,6 +27,7 @@ from ..analysts import (
     BaseAnalyst,
     MacroRatesAnalyst,
     MeanReversionAnalyst,
+    NewsAnalyst,
     OptionsAnalyst,
     PatternAnalyst,
     QuantStrategist,
@@ -38,7 +39,7 @@ from ..analysts.options_analyst import summarize_chain
 from . import black_scholes as bs
 from . import data, llm, options as opt, signals
 from .context import DataContext
-from ..data import macro_source, opra_source
+from ..data import macro_source, news_source, opra_source
 
 
 # Order matters only for display
@@ -49,6 +50,7 @@ ALL_ANALYST_CLASSES: list[type[BaseAnalyst]] = [
     VolatilityAnalyst,
     MeanReversionAnalyst,
     MacroRatesAnalyst,
+    NewsAnalyst,
     OptionsAnalyst,
 ]
 # Quant Strategist is run separately (single-pass, after the debate)
@@ -72,6 +74,8 @@ def _run_analyst_view(a: BaseAnalyst, ctx: DataContext, peer_views) -> AnalystVi
         return a.analyze_with_chain(ctx.ticker, ctx.df, ctx.snap, ctx.chain_summary, peer_views=peer_views)
     if isinstance(a, MacroRatesAnalyst):
         return a.analyze_with_rates(ctx, peer_views=peer_views)
+    if isinstance(a, NewsAnalyst):
+        return a.analyze_with_news(ctx, peer_views=peer_views)
     return a.analyze(ctx.ticker, ctx.df, ctx.snap, peer_views=peer_views)
 
 
@@ -135,7 +139,7 @@ Produce a single consensus call. Reply with one JSON object and nothing else:
     return _parse_json_reply(raw) or {"raw": raw}
 
 
-def _build_context(ticker: str, days: int, with_options: bool, with_rates: bool, emit) -> DataContext:
+def _build_context(ticker: str, days: int, with_options: bool, with_rates: bool, with_news: bool, emit) -> DataContext:
     emit("data:start", ticker=ticker, days=days)
     df = signals.add_indicators(data.fetch_ohlcv(ticker, days=days))
     if df.empty:
@@ -174,6 +178,19 @@ def _build_context(ticker: str, days: int, with_options: bool, with_rates: bool,
         except Exception as exc:
             emit("rates:error", error=str(exc))
 
+    if with_news:
+        emit("news:start", ticker=ticker)
+        try:
+            items = news_source.fetch_news(ticker, limit=25)
+            ctx.news = items
+            ctx.earnings_date = news_source.fetch_earnings_date(ticker)
+            if items:
+                emit("news:done", count=len(items), earnings_date=ctx.earnings_date)
+            else:
+                emit("news:empty")
+        except Exception as exc:
+            emit("news:error", error=str(exc))
+
     return ctx
 
 
@@ -184,6 +201,7 @@ def run(
     do_debate: bool = True,
     with_options: bool = False,
     with_rates: bool = False,
+    with_news: bool = False,
     with_quant: bool = True,
     deep: bool = False,
     on_event=None,
@@ -198,11 +216,16 @@ def run(
         if on_event:
             on_event(et, payload)
 
-    ctx = _build_context(ticker, days, with_options, with_rates, emit)
+    ctx = _build_context(ticker, days, with_options, with_rates, with_news, emit)
 
     classes = analyst_classes or ALL_ANALYST_CLASSES
     spawned: list[BaseAnalyst] = []
     skipped: list[dict] = []
+    skip_reasons = {
+        OptionsAnalyst: "needs option chain",
+        MacroRatesAnalyst: "needs --with-rates",
+        NewsAnalyst: "needs --with-news (no headlines fetched)",
+    }
     for cls in classes:
         if cls.should_spawn(ctx):
             inst = cls()
@@ -211,8 +234,7 @@ def run(
                 inst.model = "deepseek-reasoner"
             spawned.append(inst)
         else:
-            reason = "needs option chain" if cls is OptionsAnalyst else "data deps not met"
-            skipped.append({"name": cls.name, "reason": reason})
+            skipped.append({"name": cls.name, "reason": skip_reasons.get(cls, "data deps not met")})
 
     emit("spawn:done",
          spawned=[(a.name, a.provider or "anthropic", a.model or "default") for a in spawned],
