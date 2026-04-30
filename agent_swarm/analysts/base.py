@@ -95,14 +95,24 @@ Recent price/volume bars (most recent last):
 {peers_block}
 Analyze ONLY through your specialty lens. Identify any patterns or signals you see in the data.
 
+REQUIREMENTS for every observation:
+- Cite specific numbers from the data: prices, volumes, RSI values, MA values,
+  percentage changes. Do not write vague statements like "volume is high" —
+  write "volume on 2026-04-20 was 7.07M vs 20-day avg 3.61M (+96%)".
+- Reference specific dates when describing past bars (e.g., "Mar 27", "Apr 20").
+- Quantify comparisons in percent or basis points where applicable.
+- Provide AT LEAST 5 observations. More is better. Each should be a concrete,
+  evidence-based statement a trader could verify against the bar table.
+- If you say "near support" or "extended", give the actual price level or %.
+
 Reply with a single JSON object — no prose outside the JSON:
 {{
   "stance": "bullish" | "bearish" | "neutral",
   "confidence": <float 0.0-1.0>,
-  "summary": "<one sentence headline>",
+  "summary": "<one sentence headline citing specific numbers>",
   "pattern": "<named pattern if found, else empty string>",
   "horizon": "intraday" | "1-5d" | "1-4w" | "longer",
-  "observations": ["<concrete observation 1>", "<observation 2>", "..."]
+  "observations": ["<concrete observation with specific numbers>", "...", "...", "...", "..."]
 }}"""
 
     def analyze(
