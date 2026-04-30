@@ -24,7 +24,16 @@ def _print_event(et: str, payload: dict) -> None:
         print(f"📡 fetching OPRA chain for {payload['ticker']}...")
     elif et == "options:done":
         spread = payload['iv_rv_spread'] * 100
-        print(f"   {payload['contracts']} contracts  IV-RV spread {spread:+.1f}pts")
+        line = f"   {payload['contracts']} contracts  IV-RV spread {spread:+.1f}pts"
+        top_oi = payload.get("top_oi_total", 0)
+        if top_oi:
+            line += f"  top-2 expiry OI: {top_oi:,}"
+        print(line)
+        for lvl in payload.get("oi_levels", []):
+            cw = lvl.get("call_wall")
+            pw = lvl.get("put_wall")
+            mp = lvl.get("max_pain")
+            print(f"     {lvl['expiry']} ({lvl['dte']}DTE)  call wall={cw}  put wall={pw}  max pain={mp}")
     elif et == "options:empty":
         print("   chain empty (off-hours?) — Options analysts will be skipped")
     elif et == "options:error":

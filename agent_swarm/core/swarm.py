@@ -39,7 +39,7 @@ from ..analysts.options_analyst import summarize_chain
 from . import black_scholes as bs
 from . import data, llm, options as opt, signals
 from .context import DataContext
-from ..data import edgar_source, macro_source, news_source, opra_source
+from ..data import edgar_source, macro_source, news_source, oi_source, opra_source
 
 
 # Order matters only for display
@@ -155,11 +155,25 @@ def _build_context(ticker: str, days: int, with_options: bool, with_rates: bool,
         emit("options:start", ticker=ticker)
         try:
             quotes = opra_source.fetch_quotes(ticker, days=1)
-            chain = opt.build_chain(quotes, spot=ctx.spot)
+            # Pin OI fetch to the actual trade date in the quote feed (avoids
+            # UTC midnight skew that can land OI requests on dates with no data)
+            trade_date = None
+            if not quotes.empty:
+                try:
+                    trade_date = quotes.index.max().date()
+                except Exception:
+                    trade_date = None
+            oi_df = oi_source.fetch_oi_volume(ticker, trade_date=trade_date)
+            chain = opt.build_chain(quotes, spot=ctx.spot, oi_df=oi_df)
             if not chain.empty:
                 ctx.chain_df = chain
                 ctx.chain_summary = summarize_chain(chain, ctx.spot, ctx.rv30, ctx.rv60)
-                emit("options:done", contracts=len(chain), iv_rv_spread=ctx.chain_summary.iv_rv_spread)
+                top_oi_total = sum(lvl.get("total_oi", 0) for lvl in ctx.chain_summary.oi_levels)
+                emit("options:done",
+                     contracts=len(chain),
+                     iv_rv_spread=ctx.chain_summary.iv_rv_spread,
+                     top_oi_total=top_oi_total,
+                     oi_levels=ctx.chain_summary.oi_levels)
             else:
                 emit("options:empty")
         except Exception as exc:

@@ -13,8 +13,11 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from dataclasses import field
+
 from ..core import black_scholes as bs
 from ..core import options
+from ..core import oi_levels as oi_levels_mod
 from .base import AnalystView, BaseAnalyst, _parse_json_reply
 from ..core import llm
 
@@ -27,6 +30,7 @@ class ChainSummary:
     atm_iv_by_expiry: dict[str, float]   # str(expiry) -> median ATM IV
     skew_by_expiry: dict[str, float]     # 25-delta put IV - 25-delta call IV
     iv_rv_spread: float                  # nearest-expiry ATM IV minus realized 30d
+    oi_levels: list[dict] = field(default_factory=list)  # one dict per top expiry
 
 
 def summarize_chain(chain: pd.DataFrame, spot: float, rv30: float, rv60: float) -> ChainSummary:
@@ -54,6 +58,13 @@ def summarize_chain(chain: pd.DataFrame, spot: float, rv30: float, rv60: float) 
     nearest_expiry = sorted(atm_iv.keys())[0] if atm_iv else None
     iv_rv_spread = (atm_iv[nearest_expiry] - rv30) if nearest_expiry else float("nan")
 
+    levels: list[dict] = []
+    if "open_interest" in chain.columns:
+        for exp in oi_levels_mod.pick_top_expiries(chain, n=2):
+            d = oi_levels_mod.compute_oi_levels(chain, exp)
+            if d:
+                levels.append(d)
+
     return ChainSummary(
         spot=spot,
         realized_vol_30d=rv30,
@@ -61,6 +72,7 @@ def summarize_chain(chain: pd.DataFrame, spot: float, rv30: float, rv60: float) 
         atm_iv_by_expiry=atm_iv,
         skew_by_expiry=skew,
         iv_rv_spread=iv_rv_spread,
+        oi_levels=levels,
     )
 
 
@@ -72,7 +84,14 @@ class OptionsAnalyst(BaseAnalyst):
         "judge whether premium is rich or cheap, what the term structure says about expected "
         "movement, and what skew says about positioning. You translate these into specific "
         "structure choices: long calls/puts (debit), credit spreads, iron condors, calendars, "
-        "diagonals. You never pick a structure that's misaligned with the vol regime."
+        "diagonals. You never pick a structure that's misaligned with the vol regime. "
+        "You also read DEALER POSITIONING from open-interest concentration: a CALL WALL "
+        "(strike with the largest call OI) tends to act as resistance because dealers short "
+        "those calls hedge by selling stock as price rises into them; a PUT WALL acts as "
+        "support; MAX-PAIN is the strike that maximizes total option-holder loss at expiry "
+        "and tends to attract price under gamma pinning, especially in the last 5 DTE. "
+        "When picking structures, treat walls as barriers: short legs ideally sit beyond a "
+        "wall, debit structures fight a same-side wall."
     )
     provider = "deepseek"
     model = "deepseek-chat"
@@ -102,6 +121,7 @@ class OptionsAnalyst(BaseAnalyst):
             "atm_iv_by_expiry_pct": {k: round(v * 100, 1) for k, v in chain_summary.atm_iv_by_expiry.items()},
             "skew_25delta_pct": {k: round(v * 100, 1) for k, v in chain_summary.skew_by_expiry.items()},
             "iv_minus_rv30_pct": round(chain_summary.iv_rv_spread * 100, 1),
+            "front_oi_levels": chain_summary.oi_levels,
         }
 
         prompt = f"""Ticker: {ticker}

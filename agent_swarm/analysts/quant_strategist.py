@@ -237,7 +237,10 @@ class QuantStrategist(BaseAnalyst):
         "P&L, and POP estimates, you pick ONE as the recommended trade and explain WHY "
         "with reference to the actual numbers. You never invent numbers. You never pick a "
         "structure whose net vega contradicts the vol regime (e.g. don't go long vega when "
-        "IV is rich). You produce a TRADE TICKET, not a paragraph."
+        "IV is rich). You also weigh DEALER POSITIONING: a credit spread's short leg is "
+        "safer when it sits beyond a wall (the wall acts as a barrier), and a debit-call "
+        "structure that targets price levels above the call wall is fighting dealer hedging. "
+        "You produce a TRADE TICKET, not a paragraph."
     )
     # Power model: DeepSeek-R1 reasoning model — best at numerical chain-of-thought
     provider = "deepseek"
@@ -269,6 +272,7 @@ class QuantStrategist(BaseAnalyst):
             "realized_vol_30d_pct": round(ctx.rv30 * 100, 1) if ctx.rv30 else None,
             "atm_iv_by_expiry_pct": {k: round(v * 100, 1) for k, v in cs.atm_iv_by_expiry.items()} if cs else {},
             "iv_minus_rv30_pct": round(cs.iv_rv_spread * 100, 1) if cs else None,
+            "dealer_positioning": getattr(cs, "oi_levels", []) if cs else [],
         }
 
         prompt = f"""Ticker: {ctx.ticker}

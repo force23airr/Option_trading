@@ -72,12 +72,16 @@ def build_chain(
     spot: float,
     rate: float = 0.045,
     asof: date | None = None,
+    oi_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Build a contract-level option chain with IV + greeks.
 
+    If `oi_df` is supplied (one row per symbol with `open_interest` and
+    `option_volume`), those columns are merged onto the chain.
+
     Returns a DataFrame with columns:
         symbol, root, expiry, right, strike, dte, bid, ask, mid, iv,
-        delta, gamma, vega, theta
+        delta, gamma, vega, theta [, open_interest, option_volume]
     """
     snap = latest_quote_per_contract(quotes)
     if snap.empty:
@@ -122,6 +126,14 @@ def build_chain(
     chain = pd.DataFrame(rows)
     if chain.empty:
         return chain
+
+    if oi_df is not None and not oi_df.empty and "symbol" in oi_df.columns:
+        keep_cols = [c for c in ("symbol", "open_interest", "option_volume") if c in oi_df.columns]
+        chain = chain.merge(oi_df[keep_cols], on="symbol", how="left")
+        for c in ("open_interest", "option_volume"):
+            if c in chain.columns:
+                chain[c] = chain[c].fillna(0).astype(int)
+
     return chain.sort_values(["expiry", "right", "strike"]).reset_index(drop=True)
 
 
