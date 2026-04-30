@@ -44,7 +44,9 @@ def _print_event(et: str, payload: dict) -> None:
     elif et == "news:done":
         ed = payload.get("earnings_date")
         ed_str = f"  earnings {ed}" if ed else ""
-        print(f"   {payload['count']} headlines{ed_str}")
+        h = payload.get("headlines", payload['count'])
+        f = payload.get("filings", 0)
+        print(f"   {h} headlines + {f} SEC filings{ed_str}")
     elif et == "news:empty":
         print("   no headlines available — News Analyst will be skipped")
     elif et == "news:error":

@@ -104,13 +104,31 @@ def fetch_earnings_date(ticker: str) -> date | None:
 
 
 def headlines_block(news: list[dict], n: int = 15) -> str:
-    """Compact text block ready to drop into an LLM prompt."""
+    """Compact text block ready to drop into an LLM prompt.
+
+    Splits SEC EDGAR filings (primary-source, higher signal) from syndicated
+    headlines so the analyst can weight them differently.
+    """
     if not news:
         return "(no headlines)"
-    lines = []
-    for item in news[:n]:
-        when = item.get("published", "")[:10]
-        pub = item.get("publisher", "")
-        title = item.get("title", "")
-        lines.append(f"- [{when}] ({pub}) {title}")
-    return "\n".join(lines)
+
+    filings = [i for i in news if i.get("source") == "edgar"]
+    headlines = [i for i in news if i.get("source") != "edgar"]
+
+    sections = []
+    if filings:
+        lines = ["SEC FILINGS (primary source — material events):"]
+        for item in filings[:n]:
+            when = item.get("published", "")[:10]
+            lines.append(f"- [{when}] {item.get('title', '')}")
+        sections.append("\n".join(lines))
+
+    if headlines:
+        lines = ["NEWS HEADLINES (syndicated):"]
+        for item in headlines[:n]:
+            when = item.get("published", "")[:10]
+            pub = item.get("publisher", "")
+            lines.append(f"- [{when}] ({pub}) {item.get('title', '')}")
+        sections.append("\n".join(lines))
+
+    return "\n\n".join(sections)

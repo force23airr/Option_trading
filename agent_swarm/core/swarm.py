@@ -39,7 +39,7 @@ from ..analysts.options_analyst import summarize_chain
 from . import black_scholes as bs
 from . import data, llm, options as opt, signals
 from .context import DataContext
-from ..data import macro_source, news_source, opra_source
+from ..data import edgar_source, macro_source, news_source, opra_source
 
 
 # Order matters only for display
@@ -181,11 +181,17 @@ def _build_context(ticker: str, days: int, with_options: bool, with_rates: bool,
     if with_news:
         emit("news:start", ticker=ticker)
         try:
-            items = news_source.fetch_news(ticker, limit=25)
-            ctx.news = items
+            headlines = news_source.fetch_news(ticker, limit=25)
+            filings = edgar_source.fetch_recent_filings(ticker, days=90, limit=10)
+            # EDGAR first — primary-source filings outrank syndicated headlines
+            ctx.news = filings + headlines
             ctx.earnings_date = news_source.fetch_earnings_date(ticker)
-            if items:
-                emit("news:done", count=len(items), earnings_date=ctx.earnings_date)
+            if ctx.news:
+                emit("news:done",
+                     count=len(ctx.news),
+                     headlines=len(headlines),
+                     filings=len(filings),
+                     earnings_date=ctx.earnings_date)
             else:
                 emit("news:empty")
         except Exception as exc:
