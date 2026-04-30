@@ -29,9 +29,14 @@ except ImportError:
 PROVIDER_DEFAULTS = {
     "anthropic": {"model": "claude-sonnet-4-6", "base_url": None, "key_env": "ANTHROPIC_API_KEY"},
     "deepseek": {"model": "deepseek-chat", "base_url": "https://api.deepseek.com", "key_env": "DEEPSEEK_API_KEY"},
+    "kimi": {"model": "kimi-k2-0711-preview", "base_url": "https://api.moonshot.ai/v1", "key_env": "MOONSHOT_API_KEY"},
     "openai": {"model": "gpt-4o-mini", "base_url": None, "key_env": "OPENAI_API_KEY"},
     "openrouter": {"model": "anthropic/claude-sonnet-4", "base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY"},
 }
+
+# Provider fallback chain: when an analyst prefers a provider whose key isn't set,
+# fall back to the next available one. Lets you ship with optional providers.
+FALLBACK_CHAIN = ["deepseek", "anthropic", "openai", "openrouter"]
 
 
 @lru_cache(maxsize=8)
@@ -61,6 +66,21 @@ def chat(
         raise ValueError(f"unknown provider: {provider}")
 
     cfg = PROVIDER_DEFAULTS[provider]
+
+    # Graceful fallback: if the requested provider's key isn't loaded,
+    # walk down FALLBACK_CHAIN until we find one that is. Reset `model` to the
+    # fallback's default — the caller's model is provider-specific (e.g.
+    # 'kimi-k2-0711-preview' is invalid on DeepSeek).
+    if not os.environ.get(cfg["key_env"]):
+        for fb in FALLBACK_CHAIN:
+            if fb == provider:
+                continue
+            if os.environ.get(PROVIDER_DEFAULTS[fb]["key_env"]):
+                provider = fb
+                cfg = PROVIDER_DEFAULTS[fb]
+                model = None  # force the use of fallback's default model
+                break
+
     model = model or os.environ.get("LLM_MODEL") or cfg["model"]
 
     # Reasoning models burn tokens on internal chain-of-thought before output.

@@ -15,6 +15,9 @@ DATABENTO_API_KEY=db-...
 # Recommended — most analysts route here for cheaper/faster runs
 DEEPSEEK_API_KEY=sk-...
 
+# Optional — if set, Volume + MeanRev analysts use Kimi K2 for diversity
+MOONSHOT_API_KEY=sk-...
+
 # Optional — if you want to add more providers
 OPENAI_API_KEY=sk-...
 OPENROUTER_API_KEY=sk-or-...
@@ -26,7 +29,8 @@ OPENROUTER_API_KEY=sk-or-...
 |---|---|
 | Anthropic | Pattern Analyst + Coordinator (synthesis) |
 | Databento | All OHLCV/futures/OPRA pulls |
-| DeepSeek | Trend, Volume, Volatility, MeanRev, Macro Rates, Options analysts (V3) + Quant Strategist (R1) |
+| DeepSeek | Trend, Volatility, Macro Rates, Options analysts (V3) + Quant Strategist (R1) |
+| Kimi (Moonshot) | Volume + Mean Reversion analysts. Falls back to DeepSeek if `MOONSHOT_API_KEY` is unset. |
 | OpenAI / OpenRouter | Optional — only used if you set `LLM_PROVIDER=openai`/`openrouter` or pin a specific analyst there |
 
 ## Verify your keys are loaded

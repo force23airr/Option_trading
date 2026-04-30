@@ -9,5 +9,7 @@ class MeanReversionAnalyst(BaseAnalyst):
         "stretched distance from MA20, exhaustion candles. You do NOT chase trends. If the "
         "name is not at an extreme, your honest answer is 'neutral, no setup'."
     )
-    provider = "deepseek"
-    model = "deepseek-chat"
+    # Kimi for a different perspective on extremes. Falls back to DeepSeek if
+    # MOONSHOT_API_KEY isn't set.
+    provider = "kimi"
+    model = "kimi-k2-0711-preview"

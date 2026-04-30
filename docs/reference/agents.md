@@ -10,9 +10,9 @@ cheap and tool-fit (DeepSeek for structured math, Claude for synthesis).
 |---|---|---|---|---|
 | Trend Analyst | Dow Theory: MA stack, slope, swing structure | Always | DeepSeek V3 | Specialist |
 | Pattern Analyst | Edwards & Magee: triangles, H&S, wedges | Always | Claude (visual intuition) | Specialist |
-| Volume Analyst | Wyckoff: accumulation / distribution | Always | DeepSeek V3 | Specialist |
+| Volume Analyst | Wyckoff: accumulation / distribution | Always | **Kimi K2** (falls back to DeepSeek) | Specialist |
 | Volatility Analyst | Range / regime analysis (no Black-Scholes) | Always | DeepSeek V3 | Specialist |
-| Mean Reversion Analyst | RSI / Bollinger extremes | Always | DeepSeek V3 | Specialist |
+| Mean Reversion Analyst | RSI / Bollinger extremes | Always | **Kimi K2** (falls back to DeepSeek) | Specialist |
 | Macro Rates Analyst | Treasury yield curve → ticker pressure | `--with-rates` | DeepSeek V3 | Specialist |
 | Options Analyst | IV vs RV, term structure, skew | `--with-options` | DeepSeek V3 | Specialist |
 | ⚡ Quant Strategist | Black-Scholes scenario analysis | `--with-options` | **DeepSeek-R1** (reasoning) | Power agent |
