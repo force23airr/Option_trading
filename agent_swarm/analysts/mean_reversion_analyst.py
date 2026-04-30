@@ -12,4 +12,4 @@ class MeanReversionAnalyst(BaseAnalyst):
     # Kimi for a different perspective on extremes. Falls back to DeepSeek if
     # MOONSHOT_API_KEY isn't set.
     provider = "kimi"
-    model = "kimi-k2-0711-preview"
+    model = "moonshot-v1-auto"

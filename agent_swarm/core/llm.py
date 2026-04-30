@@ -17,6 +17,7 @@ Optional defaults:
 from __future__ import annotations
 
 import os
+import time
 from functools import lru_cache
 
 try:
@@ -29,7 +30,7 @@ except ImportError:
 PROVIDER_DEFAULTS = {
     "anthropic": {"model": "claude-sonnet-4-6", "base_url": None, "key_env": "ANTHROPIC_API_KEY"},
     "deepseek": {"model": "deepseek-chat", "base_url": "https://api.deepseek.com", "key_env": "DEEPSEEK_API_KEY"},
-    "kimi": {"model": "kimi-k2-0711-preview", "base_url": "https://api.moonshot.ai/v1", "key_env": "MOONSHOT_API_KEY"},
+    "kimi": {"model": "moonshot-v1-auto", "base_url": "https://api.moonshot.ai/v1", "key_env": "MOONSHOT_API_KEY"},
     "openai": {"model": "gpt-4o-mini", "base_url": None, "key_env": "OPENAI_API_KEY"},
     "openrouter": {"model": "anthropic/claude-sonnet-4", "base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY"},
 }
@@ -91,6 +92,36 @@ def chat(
     if not os.environ.get(cfg["key_env"]):
         raise RuntimeError(f"{cfg['key_env']} not set in environment / .env")
 
+    # Retry on rate limit / overloaded with exponential backoff, then fall back
+    # to next available provider if all retries fail.
+    last_error = None
+    for attempt in range(3):
+        try:
+            return _do_call(provider, model, system, prompt, max_tokens, temperature)
+        except Exception as exc:
+            err_str = str(exc).lower()
+            is_transient = any(k in err_str for k in ("429", "overloaded", "rate", "timeout", "503"))
+            if not is_transient or attempt == 2:
+                last_error = exc
+                break
+            time.sleep(2 ** attempt)  # 1s, 2s
+
+    # All retries failed → walk fallback chain
+    for fb in FALLBACK_CHAIN:
+        if fb == provider:
+            continue
+        if not os.environ.get(PROVIDER_DEFAULTS[fb]["key_env"]):
+            continue
+        try:
+            print(f"[llm] {provider} failing → falling back to {fb}")
+            return _do_call(fb, PROVIDER_DEFAULTS[fb]["model"], system, prompt, max_tokens, temperature)
+        except Exception:
+            continue
+
+    raise last_error or RuntimeError("all providers failed")
+
+
+def _do_call(provider: str, model: str, system, prompt, max_tokens, temperature) -> str:
     if provider == "anthropic":
         msg = _anthropic_client().messages.create(
             model=model,

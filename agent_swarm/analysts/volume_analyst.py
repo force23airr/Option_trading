@@ -13,4 +13,4 @@ class VolumeAnalyst(BaseAnalyst):
     # a genuine "second voice" to the round-2 debate. Falls back to DeepSeek
     # automatically if MOONSHOT_API_KEY isn't set.
     provider = "kimi"
-    model = "kimi-k2-0711-preview"
+    model = "moonshot-v1-auto"
