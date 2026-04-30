@@ -66,6 +66,13 @@ def chat(
     if provider not in PROVIDER_DEFAULTS:
         raise ValueError(f"unknown provider: {provider}")
 
+    # SKIP_ANTHROPIC=1 (set by --no-anthropic) routes any Anthropic call to
+    # DeepSeek before issuing the request. Useful when out of credits or to
+    # save cost on a run.
+    if provider == "anthropic" and os.environ.get("SKIP_ANTHROPIC"):
+        provider = "deepseek"
+        model = None
+
     cfg = PROVIDER_DEFAULTS[provider]
 
     # Graceful fallback: if the requested provider's key isn't loaded,

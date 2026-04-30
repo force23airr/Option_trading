@@ -78,7 +78,7 @@ doesn't yet price in? Reply with one JSON object:
         raw = llm.chat(
             prompt, system=self.system_prompt,
             provider=self.provider, model=self.model,
-            max_tokens=900, temperature=0.3,
+            max_tokens=1800, temperature=0.3,
         )
         parsed = _parse_json_reply(raw)
         return AnalystView(

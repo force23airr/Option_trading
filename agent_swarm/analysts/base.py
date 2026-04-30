@@ -128,10 +128,14 @@ Reply with a single JSON object — no prose outside the JSON:
             system=self.system_prompt,
             provider=self.provider,
             model=self.model,
-            max_tokens=900,
+            max_tokens=1800,  # was 900 — Claude+detailed observations were getting truncated
             temperature=0.4,
         )
         parsed = _parse_json_reply(raw)
+        if not parsed:
+            # Truncation or malformed JSON — print a diagnostic instead of silently
+            # returning a 0%-confidence empty view.
+            print(f"[{self.name}] ⚠ JSON parse failed (raw last 200 chars: {raw[-200:]!r})")
         return AnalystView(
             analyst=self.name,
             ticker=ticker,

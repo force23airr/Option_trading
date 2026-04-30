@@ -1,7 +1,8 @@
 """Preview OPRA dataset access and cost before issuing a paid query.
 
-    python -m agent_swarm.tools.opra_check                # cost previews only
-    python -m agent_swarm.tools.opra_check --pull COIN    # also pull a small sample
+    python -m agent_swarm.tools.opra_check                # COIN cost previews
+    python -m agent_swarm.tools.opra_check --ticker JPM   # cost previews for JPM
+    python -m agent_swarm.tools.opra_check --ticker JPM --pull
 """
 from __future__ import annotations
 
@@ -11,9 +12,15 @@ from datetime import datetime, timedelta, timezone
 from agent_swarm.data import databento_source as ds
 
 
-def preview(symbol: str, schema: str, stype_in: str, days: int) -> None:
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+def _safe_window(days: int) -> tuple[datetime, datetime]:
+    """Clamp end to yesterday UTC midnight to stay inside historical license."""
+    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     start = end - timedelta(days=days)
+    return start, end
+
+
+def preview(symbol: str, schema: str, stype_in: str, days: int) -> None:
+    start, end = _safe_window(days)
     print(f"\n  schema={schema:<10} stype={stype_in:<11} symbols={symbol}  ({days}d)")
     try:
         cost = ds._client().metadata.get_cost(
@@ -30,8 +37,7 @@ def preview(symbol: str, schema: str, stype_in: str, days: int) -> None:
 
 
 def pull_sample(parent: str) -> None:
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    start = end - timedelta(days=2)
+    start, end = _safe_window(2)
     print(f"\n  pulling sample: trades for {parent}.OPT, last 2 days, limit=500")
     try:
         data = ds._client().timeseries.get_range(
@@ -58,17 +64,19 @@ def pull_sample(parent: str) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pull", help="ticker root to pull a small trade sample for (e.g. COIN)")
+    ap.add_argument("--ticker", default="COIN", help="ticker root for cost previews (default COIN)")
+    ap.add_argument("--pull", action="store_true", help="also pull a small sample of trades")
     args = ap.parse_args()
 
-    print("OPRA cost previews:")
-    preview("COIN.OPT", "trades", "parent", days=1)
-    preview("COIN.OPT", "cbbo-1s", "parent", days=1)
-    preview("COIN.OPT", "cbbo-1m", "parent", days=1)
-    preview("COIN.OPT", "ohlcv-1d", "parent", days=30)
+    parent = f"{args.ticker.upper()}.OPT"
+    print(f"OPRA cost previews for {parent}:")
+    preview(parent, "trades", "parent", days=1)
+    preview(parent, "cbbo-1s", "parent", days=1)
+    preview(parent, "cbbo-1m", "parent", days=1)
+    preview(parent, "ohlcv-1d", "parent", days=30)
 
     if args.pull:
-        pull_sample(args.pull.upper())
+        pull_sample(args.ticker.upper())
 
 
 if __name__ == "__main__":

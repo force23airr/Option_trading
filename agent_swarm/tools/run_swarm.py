@@ -111,6 +111,7 @@ def main():
     ap.add_argument("--with-news", action="store_true", help="pull recent headlines + earnings date and add News Analyst (Claude)")
     ap.add_argument("--no-quant", action="store_true", help="skip the Quant Strategist (DeepSeek-R1) power agent")
     ap.add_argument("--deep", action="store_true", help="upgrade all DeepSeek analysts from V3 to R1 reasoning model — slower (3-6min) but deeper analysis")
+    ap.add_argument("--no-anthropic", action="store_true", help="route every Anthropic-pinned call to DeepSeek (use when out of Claude credits)")
     ap.add_argument("--provider", help="default LLM provider (anthropic|deepseek|openai|openrouter)")
     ap.add_argument("--model", help="default LLM model")
     ap.add_argument("--save-json", help="path to write full result as JSON (overrides auto-save)")
@@ -121,6 +122,10 @@ def main():
         os.environ["LLM_PROVIDER"] = args.provider
     if args.model:
         os.environ["LLM_MODEL"] = args.model
+    if args.no_anthropic:
+        os.environ["SKIP_ANTHROPIC"] = "1"
+        # Also force the env default to deepseek for unpinned analysts
+        os.environ.setdefault("LLM_PROVIDER", "deepseek")
 
     result = swarm.run(
         args.ticker.upper(),

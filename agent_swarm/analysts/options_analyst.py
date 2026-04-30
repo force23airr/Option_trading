@@ -131,7 +131,7 @@ Translate this into a vol view. Reply with one JSON object:
             system=self.system_prompt,
             provider=self.provider,
             model=self.model,
-            max_tokens=900,
+            max_tokens=1800,
             temperature=0.3,
         )
         parsed = _parse_json_reply(raw)

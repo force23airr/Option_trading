@@ -26,7 +26,8 @@ def fetch_quotes(
     schema: str = "cbbo-1m",
 ) -> pd.DataFrame:
     """Bid/ask quotes for every option contract under `parent` (e.g. 'COIN')."""
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Clamp end to yesterday UTC midnight to stay inside historical license boundary
+    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     start = end - timedelta(days=days)
     data = ds._client().timeseries.get_range(
         dataset=OPRA_DATASET,
@@ -40,7 +41,8 @@ def fetch_quotes(
 
 
 def fetch_trades(parent: str, days: int = 1, limit: int | None = None) -> pd.DataFrame:
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Clamp end to yesterday UTC midnight to stay inside historical license boundary
+    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     start = end - timedelta(days=days)
     kwargs = dict(
         dataset=OPRA_DATASET,
@@ -56,7 +58,8 @@ def fetch_trades(parent: str, days: int = 1, limit: int | None = None) -> pd.Dat
 
 
 def cost_estimate(parent: str, days: int = 1, schema: str = "cbbo-1m") -> float:
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Clamp end to yesterday UTC midnight to stay inside historical license boundary
+    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     start = end - timedelta(days=days)
     return ds._client().metadata.get_cost(
         dataset=OPRA_DATASET,
