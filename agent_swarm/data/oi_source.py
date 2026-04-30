@@ -1,12 +1,16 @@
-"""Per-contract open-interest + volume from Databento OPRA.
+"""Per-contract open interest from Databento OPRA.
 
-Two pulls (matching the working notebook in `notebooks/nvda_oi_by_strike.py`):
+One pull:
   - schema="statistics" filtered to OPEN_INTEREST stat_type — start-of-day OI
     is published before the RTH open
-  - schema="ohlcv-1d" — daily volume per contract
 
-Returns one row per option `symbol` with `[symbol, open_interest, option_volume]`
-ready to merge onto the chain DataFrame produced by `core.options.build_chain`.
+Returns one row per option `symbol` with `[symbol, open_interest]` ready to
+merge onto the chain DataFrame produced by `core.options.build_chain`.
+
+Cost: ~$0.22/ticker/day on top of the existing $0.22 cbbo-1m chain pull
+(~2× total). We deliberately *don't* fetch `ohlcv-1d` for option volume —
+that schema costs ~$0.67/ticker/day and the per-contract volume isn't used
+in OI-level computation or the analyst prompts.
 
 Designed to fail soft: any error returns an empty DataFrame so the swarm can
 still run with quotes-only data.
@@ -52,43 +56,22 @@ def _fetch_oi(client: db.Historical, parent: str, trade_date: dt.date) -> pd.Dat
     return stats[["symbol", "open_interest"]]
 
 
-def _fetch_volume(client: db.Historical, parent: str, trade_date: dt.date) -> pd.DataFrame:
-    vol = client.timeseries.get_range(
-        dataset=OPRA_DATASET,
-        symbols=f"{parent.upper()}.OPT",
-        schema="ohlcv-1d",
-        stype_in="parent",
-        start=trade_date,
-    ).to_df()
-
-    if vol.empty:
-        return pd.DataFrame(columns=["symbol", "option_volume"])
-
-    return vol.groupby("symbol")["volume"].sum().reset_index().rename(columns={"volume": "option_volume"})
-
-
 def fetch_oi_volume(parent: str, trade_date: dt.date | None = None) -> pd.DataFrame:
-    """Return one row per option symbol with `[symbol, open_interest, option_volume]`.
+    """Return one row per option symbol with `[symbol, open_interest]`.
 
-    Empty DataFrame on any failure so callers can degrade gracefully.
+    Name kept as `fetch_oi_volume` for call-site stability; volume column is
+    no longer fetched (see module docstring). Empty DataFrame on failure so
+    callers can degrade gracefully.
     """
     trade_date = trade_date or _default_trade_date()
     try:
         client = ds._client()
         oi = _fetch_oi(client, parent, trade_date)
-        vol = _fetch_volume(client, parent, trade_date)
     except Exception:
-        return pd.DataFrame(columns=["symbol", "open_interest", "option_volume"])
-
-    if oi.empty and vol.empty:
-        return pd.DataFrame(columns=["symbol", "open_interest", "option_volume"])
+        return pd.DataFrame(columns=["symbol", "open_interest"])
 
     if oi.empty:
-        oi = pd.DataFrame(columns=["symbol", "open_interest"])
-    if vol.empty:
-        vol = pd.DataFrame(columns=["symbol", "option_volume"])
+        return pd.DataFrame(columns=["symbol", "open_interest"])
 
-    merged = oi.merge(vol, on="symbol", how="outer")
-    merged["open_interest"] = merged["open_interest"].fillna(0).astype(int)
-    merged["option_volume"] = merged["option_volume"].fillna(0).astype(int)
-    return merged
+    oi["open_interest"] = oi["open_interest"].fillna(0).astype(int)
+    return oi

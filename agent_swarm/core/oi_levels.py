@@ -109,11 +109,15 @@ def compute_oi_levels(chain: pd.DataFrame, expiry: date) -> dict | None:
     }
 
 
-def pick_top_expiries(chain: pd.DataFrame, n: int = 2) -> list[date]:
-    """The n expiries with the largest total OI (excluding DTE ≤ 0)."""
+def pick_top_expiries(chain: pd.DataFrame, n: int = 2, max_dte: int = 120) -> list[date]:
+    """The n expiries with the largest total OI within a tradable horizon.
+
+    `max_dte=120` filters out LEAPs whose post-split orphan strikes ($0.50,
+    $2.50, etc.) carry massive but non-actionable OI and distort max-pain.
+    """
     if chain.empty or "open_interest" not in chain.columns:
         return []
-    valid = chain[chain["dte"] > 0]
+    valid = chain[(chain["dte"] > 0) & (chain["dte"] <= max_dte)]
     if valid.empty:
         return []
     totals = valid.groupby("expiry")["open_interest"].sum().sort_values(ascending=False)

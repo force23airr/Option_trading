@@ -237,10 +237,12 @@ class QuantStrategist(BaseAnalyst):
         "P&L, and POP estimates, you pick ONE as the recommended trade and explain WHY "
         "with reference to the actual numbers. You never invent numbers. You never pick a "
         "structure whose net vega contradicts the vol regime (e.g. don't go long vega when "
-        "IV is rich). You also weigh DEALER POSITIONING: a credit spread's short leg is "
-        "safer when it sits beyond a wall (the wall acts as a barrier), and a debit-call "
-        "structure that targets price levels above the call wall is fighting dealer hedging. "
-        "You produce a TRADE TICKET, not a paragraph."
+        "IV is rich). You also weigh OI CONCENTRATION as a soft positioning signal — not "
+        "as a guarantee of dealer gamma sign. A credit spread's short leg is generally "
+        "safer beyond a wall (walls TEND to act as barriers when dealers are net short, "
+        "which is typical for retail-heavy names but not guaranteed); a debit structure "
+        "targeting strikes past a same-side wall may fight hedging flow. Use OI as a "
+        "tiebreaker, not a directional thesis. You produce a TRADE TICKET, not a paragraph."
     )
     # Power model: DeepSeek-R1 reasoning model — best at numerical chain-of-thought
     provider = "deepseek"
