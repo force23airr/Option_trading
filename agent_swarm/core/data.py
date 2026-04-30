@@ -15,15 +15,34 @@ import yfinance as yf
 from ..data import databento_source
 
 
-def fetch_ohlcv(ticker: str, days: int = 365, source: str | None = None) -> pd.DataFrame:
+DATASET_HINTS = {
+    # NYSE-listed (use XNYS.PILLAR for accurate primary-venue volumes)
+    "JPM": "XNYS.PILLAR", "BAC": "XNYS.PILLAR", "WFC": "XNYS.PILLAR", "C": "XNYS.PILLAR",
+    "GS": "XNYS.PILLAR", "MS": "XNYS.PILLAR", "BLK": "XNYS.PILLAR", "V": "XNYS.PILLAR",
+    "MA": "XNYS.PILLAR", "AXP": "XNYS.PILLAR", "DIS": "XNYS.PILLAR", "WMT": "XNYS.PILLAR",
+    "PG": "XNYS.PILLAR", "JNJ": "XNYS.PILLAR", "XOM": "XNYS.PILLAR", "CVX": "XNYS.PILLAR",
+    "PFE": "XNYS.PILLAR", "MRK": "XNYS.PILLAR", "T": "XNYS.PILLAR", "VZ": "XNYS.PILLAR",
+    "PCG": "XNYS.PILLAR", "EIX": "XNYS.PILLAR",
+    # Add more as you encounter them. XNAS.ITCH (default) covers Nasdaq.
+}
+
+
+def fetch_ohlcv(ticker: str, days: int = 365, source: str | None = None,
+                dataset: str | None = None) -> pd.DataFrame:
+    """Fetch OHLCV bars. Auto-routes NYSE names to XNYS.PILLAR via DATASET_HINTS.
+
+    Override with `dataset='XNAS.ITCH' | 'DBEQ.BASIC' | 'XNYS.PILLAR' | ...`
+    or set OHLCV_SOURCE=yfinance to force the fallback.
+    """
     source = source or os.environ.get("OHLCV_SOURCE", "databento")
     if source == "databento":
+        ds_used = dataset or DATASET_HINTS.get(ticker.upper(), "XNAS.ITCH")
         try:
-            df = databento_source.fetch_ohlcv(ticker, days=days)
+            df = databento_source.fetch_ohlcv(ticker, days=days, dataset=ds_used)
             if not df.empty:
                 return df
         except Exception as exc:
-            print(f"[data] databento fetch failed ({exc}); falling back to yfinance")
+            print(f"[data] databento {ds_used} fetch failed ({exc}); falling back to yfinance")
     return _fetch_ohlcv_yf(ticker, days=days)
 
 

@@ -7,7 +7,8 @@ What's wired today, what fits the architecture, what doesn't.
 | Source | Schema / endpoint | What you get | Cost |
 |---|---|---|---|
 | **Databento Historical** (`XNAS.ITCH`) | `ohlcv-1d` | Daily OHLCV for any Nasdaq-listed US single-name | Pennies per ticker/year |
-| **Databento Historical** (`DBEQ.BASIC`) | `ohlcv-1d` | NYSE-listed names — pass `dataset="DBEQ.BASIC"` explicitly | Pennies |
+| **Databento Historical** (`XNYS.PILLAR`) | `ohlcv-1d` | NYSE-listed names (JPM, GS, JNJ, XOM, etc.) — auto-routed | Pennies |
+| **Databento Historical** (`DBEQ.BASIC`) | `ohlcv-1d` | "Basic" consolidated US equities — only ~3y history; volumes incomplete | Pennies |
 | **Databento Historical** (`GLBX.MDP3`) | `ohlcv-1d` | CME futures — `CL.c.0`, `NG.c.0`, `GC.c.0`, `ES.c.0`, `NQ.c.0` (continuous front-month) | Pennies |
 | **Databento Historical** (`OPRA.PILLAR`) | `cbbo-1m` | Live US option chains, bid/ask sampled every 1 min | ~$0.18 / day / ticker |
 | **Databento OPRA** | `trades` | Every option print on the tape | ~$0.36 / day / ticker |

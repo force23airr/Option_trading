@@ -97,6 +97,7 @@ def main():
     ap.add_argument("--with-options", action="store_true", help="pull live OPRA chain (~$0.18) and add Options analysts")
     ap.add_argument("--with-rates", action="store_true", help="pull Treasury yield curve (3M/5Y/10Y/30Y) and add Macro Rates Analyst")
     ap.add_argument("--no-quant", action="store_true", help="skip the Quant Strategist (DeepSeek-R1) power agent")
+    ap.add_argument("--deep", action="store_true", help="upgrade all DeepSeek analysts from V3 to R1 reasoning model — slower (3-6min) but deeper analysis")
     ap.add_argument("--provider", help="default LLM provider (anthropic|deepseek|openai|openrouter)")
     ap.add_argument("--model", help="default LLM model")
     ap.add_argument("--save-json", help="path to write full result as JSON (overrides auto-save)")
@@ -115,6 +116,7 @@ def main():
         with_options=args.with_options,
         with_rates=args.with_rates,
         with_quant=not args.no_quant,
+        deep=args.deep,
         on_event=_print_event,
     )
 

@@ -63,6 +63,11 @@ def chat(
     cfg = PROVIDER_DEFAULTS[provider]
     model = model or os.environ.get("LLM_MODEL") or cfg["model"]
 
+    # Reasoning models burn tokens on internal chain-of-thought before output.
+    # Auto-bump max_tokens so the answer isn't truncated.
+    if "reasoner" in (model or "").lower() and max_tokens < 4000:
+        max_tokens = 8000
+
     if not os.environ.get(cfg["key_env"]):
         raise RuntimeError(f"{cfg['key_env']} not set in environment / .env")
 

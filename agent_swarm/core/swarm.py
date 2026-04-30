@@ -185,6 +185,7 @@ def run(
     with_options: bool = False,
     with_rates: bool = False,
     with_quant: bool = True,
+    deep: bool = False,
     on_event=None,
 ) -> SwarmResult:
     """Run the swarm.
@@ -204,7 +205,11 @@ def run(
     skipped: list[dict] = []
     for cls in classes:
         if cls.should_spawn(ctx):
-            spawned.append(cls())
+            inst = cls()
+            # --deep: upgrade DeepSeek V3 analysts to R1 (reasoner) for deeper analysis.
+            if deep and inst.provider == "deepseek" and inst.model == "deepseek-chat":
+                inst.model = "deepseek-reasoner"
+            spawned.append(inst)
         else:
             reason = "needs option chain" if cls is OptionsAnalyst else "data deps not met"
             skipped.append({"name": cls.name, "reason": reason})

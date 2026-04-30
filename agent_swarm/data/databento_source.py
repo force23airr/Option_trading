@@ -46,7 +46,9 @@ def fetch_ohlcv(
     stype_in: str = "raw_symbol",
 ) -> pd.DataFrame:
     """Return a DataFrame indexed by date with Open/High/Low/Close/Volume columns."""
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Clamp end to *yesterday* UTC midnight. After midnight UTC, "today UTC"
+    # is past Databento's daily-bar publication, which 422s. -1 day is safe.
+    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     start = end - timedelta(days=days)
 
     data = _client().timeseries.get_range(
@@ -65,7 +67,19 @@ def fetch_ohlcv(
     rename = {"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}
     df = df.rename(columns=rename)
     cols = [c for c in ("Open", "High", "Low", "Close", "Volume") if c in df.columns]
-    return df[cols].copy()
+    df = df[cols].copy()
+
+    # Consolidated datasets (e.g. DBEQ.BASIC) return one row per venue per day.
+    # Aggregate to a single bar per timestamp.
+    if df.index.has_duplicates:
+        df = df.groupby(df.index).agg({
+            "Open": "first",
+            "High": "max",
+            "Low": "min",
+            "Close": "last",
+            "Volume": "sum",
+        })
+    return df
 
 
 def fetch_futures(
@@ -95,7 +109,9 @@ def cost_estimate(
     schema: str = DEFAULT_SCHEMA,
 ) -> dict:
     """Preview Databento billing before issuing a paid query."""
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    # Clamp end to *yesterday* UTC midnight. After midnight UTC, "today UTC"
+    # is past Databento's daily-bar publication, which 422s. -1 day is safe.
+    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     start = end - timedelta(days=days)
     return _client().metadata.get_cost(
         dataset=dataset,

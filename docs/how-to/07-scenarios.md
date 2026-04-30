@@ -7,6 +7,24 @@ All commands assume `cwd = /Users/angelfernandez/Option_trading` and use
 
 ## Stock OHLCV — single ticker
 
+### Dataset auto-routing (Databento)
+
+By default the system picks the right Databento dataset:
+
+| Ticker type | Auto-routes to | Note |
+|---|---|---|
+| Nasdaq names (AAPL, NVDA, COIN, MSTR, TSLA, etc.) | `XNAS.ITCH` | Full Nasdaq tape |
+| NYSE names (JPM, BAC, GS, JNJ, XOM, PCG, V, MA, T, WMT, etc.) | `XNYS.PILLAR` | NYSE primary venue, real volumes |
+
+To override:
+
+```
+python -m agent_swarm.tools.view_data SOMETICKER --dataset DBEQ.BASIC
+```
+
+If neither default works (e.g. an exotic ETF), the system silently falls back
+to yfinance.
+
 ### 1 year of history (default depth)
 
 ```

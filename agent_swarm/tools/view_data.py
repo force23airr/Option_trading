@@ -34,8 +34,8 @@ def _ascii_chart(closes: pd.Series, height: int = 12, width: int = 60) -> str:
     return f"{hi:>8.2f} ┤\n{chart}\n{lo:>8.2f} ┤"
 
 
-def view(ticker: str, days: int = 90, save_csv: bool = False) -> pd.DataFrame:
-    df = data.fetch_ohlcv(ticker, days=days)
+def view(ticker: str, days: int = 90, save_csv: bool = False, dataset: str | None = None) -> pd.DataFrame:
+    df = data.fetch_ohlcv(ticker, days=days, dataset=dataset)
     if df.empty:
         print(f"No data for {ticker}")
         return df
@@ -74,8 +74,9 @@ def main():
     ap.add_argument("ticker")
     ap.add_argument("--days", type=int, default=90)
     ap.add_argument("--csv", action="store_true", help="also save CSV to data_cache/")
+    ap.add_argument("--dataset", help="Databento dataset (XNAS.ITCH/XNYS.PILLAR/DBEQ.BASIC). Auto-routes NYSE names by default.")
     args = ap.parse_args()
-    view(args.ticker.upper(), days=args.days, save_csv=args.csv)
+    view(args.ticker.upper(), days=args.days, save_csv=args.csv, dataset=args.dataset)
 
 
 if __name__ == "__main__":
