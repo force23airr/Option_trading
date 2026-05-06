@@ -1,6 +1,6 @@
 # Agents reference
 
-The current swarm has 7 specialist analysts + 1 power agent + 1 coordinator.
+The current swarm has 8 specialist analysts + 1 power agent + 1 coordinator.
 Each declares its preferred LLM provider. Provider routing makes the swarm
 cheap and tool-fit (DeepSeek for structured math, Claude for synthesis).
 
@@ -14,6 +14,7 @@ cheap and tool-fit (DeepSeek for structured math, Claude for synthesis).
 | Volatility Analyst | Range / regime analysis (no Black-Scholes) | Always | DeepSeek V3 | Specialist |
 | Mean Reversion Analyst | RSI / Bollinger extremes | Always | **Kimi K2** (falls back to DeepSeek) | Specialist |
 | Macro Rates Analyst | Treasury yield curve → ticker pressure | `--with-rates` | DeepSeek V3 | Specialist |
+| Events Analyst | Scheduled catalyst / calendar risk | `--with-events` | DeepSeek V3 | Specialist |
 | Options Analyst | IV vs RV, term structure, skew | `--with-options` | DeepSeek V3 | Specialist |
 | ⚡ Quant Strategist | Black-Scholes scenario analysis | `--with-options` | **DeepSeek-R1** (reasoning) | Power agent |
 | Coordinator | Synthesizes the team | Always at end | Claude | Synthesizer |
@@ -64,6 +65,15 @@ cheap and tool-fit (DeepSeek for structured math, Claude for synthesis).
   - Gold reactive to real-rate moves
   - Crypto proxies (COIN, MSTR, MARA) = risk-on; sell on hawkish surprise
 - **Spawns only with `--with-rates`**
+
+## Events Analyst
+
+- **Looks for:** earnings proximity, macro calendar events, Fed/rates catalysts, regulatory dates, sector events, and manually supplied ticker-specific dates
+- **Math inputs:** event date, days away, importance 1-5, deterministic event risk score, rule action
+- **Data source:** yfinance earnings date plus optional `data_cache/events_calendar.json` or `SWARM_EVENTS_CALENDAR`
+- **Output:** event risk, trade permission, expected volatility effect, and concrete observations
+- **Hard-rule impact:** event `rule_action` values can reduce size, force watchlist-only, or reject a Quant ticket
+- **Spawns only with `--with-events`**
 
 ## Options Analyst
 

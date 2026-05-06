@@ -9,6 +9,7 @@ from .options_analyst import OptionsAnalyst
 from .quant_strategist import QuantStrategist
 from .macro_rates_analyst import MacroRatesAnalyst
 from .news_analyst import NewsAnalyst
+from .events_analyst import EventsAnalyst
 
 __all__ = [
     "AnalystView",
@@ -22,4 +23,5 @@ __all__ = [
     "QuantStrategist",
     "MacroRatesAnalyst",
     "NewsAnalyst",
+    "EventsAnalyst",
 ]

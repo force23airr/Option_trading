@@ -60,6 +60,24 @@ def _print_event(et: str, payload: dict) -> None:
         print("   no headlines available — News Analyst will be skipped")
     elif et == "news:error":
         print(f"   news fetch failed: {payload['error']}")
+    elif et == "events:start":
+        print(f"📅 fetching scheduled events for {payload['ticker']}...")
+    elif et == "events:done":
+        s = payload.get("summary", {})
+        print(
+            f"   {payload['count']} event(s)  "
+            f"risk_score={s.get('event_risk_score', 0)}  "
+            f"nearest={s.get('nearest_event_days')}d"
+        )
+        for event in (s.get("events") or [])[:5]:
+            print(
+                f"     {event.get('date')}  {event.get('name')}  "
+                f"({event.get('days_away')}d, importance={event.get('importance')}/5)"
+            )
+    elif et == "events:empty":
+        print("   no scheduled events found — Events Analyst will be skipped")
+    elif et == "events:error":
+        print(f"   events fetch failed: {payload['error']}")
     elif et == "spawn:done":
         print(f"\n🧬 SPAWNED {len(payload['spawned'])} analyst(s):")
         for name, prov, model in payload["spawned"]:
@@ -125,6 +143,26 @@ def _print_event(et: str, payload: dict) -> None:
             print(f"  Conflict:  {tag} {c.get('conflict_note','')}")
         print(f"\n  Rationale: {c.get('rationale','')}")
         print("=" * 70)
+    elif et == "rules:done":
+        gate = payload["hard_rules"]
+        print("\n" + "=" * 70)
+        print(f"  HARD RULES: {str(gate.get('decision', '?')).upper()}")
+        print("=" * 70)
+        print(f"  {gate.get('summary', '')}")
+        print(f"  Trade allowed: {gate.get('trade_allowed')}  Size x{gate.get('position_size_multiplier', 0):.2f}")
+        if gate.get("hard_blocks"):
+            print("\n  Blocks:")
+            for b in gate["hard_blocks"]:
+                print(f"    • {b}")
+        if gate.get("adjustments"):
+            print("\n  Adjustments:")
+            for a in gate["adjustments"]:
+                print(f"    • {a}")
+        if gate.get("notes"):
+            print("\n  Notes:")
+            for n in gate["notes"]:
+                print(f"    • {n}")
+        print("=" * 70)
 
 
 def main():
@@ -135,9 +173,13 @@ def main():
     ap.add_argument("--with-options", action="store_true", help="pull live OPRA chain (~$0.18) and add Options analysts")
     ap.add_argument("--with-rates", action="store_true", help="pull Treasury yield curve (3M/5Y/10Y/30Y) and add Macro Rates Analyst")
     ap.add_argument("--with-news", action="store_true", help="pull recent headlines + earnings date and add News Analyst (Claude)")
+    ap.add_argument("--with-events", action="store_true", help="pull scheduled events + earnings calendar and add Events Analyst")
     ap.add_argument("--no-quant", action="store_true", help="skip the Quant Strategist (DeepSeek-R1) power agent")
     ap.add_argument("--deep", action="store_true", help="upgrade all DeepSeek analysts from V3 to R1 reasoning model — slower (3-6min) but deeper analysis")
     ap.add_argument("--no-anthropic", action="store_true", help="route every Anthropic-pinned call to DeepSeek (use when out of Claude credits)")
+    ap.add_argument("--account-size", type=float, help="account value for hard-rule max-loss cap; also supports SWARM_ACCOUNT_SIZE")
+    ap.add_argument("--max-loss-pct", type=float, help="reject if ticket max loss exceeds this account fraction; default/env SWARM_MAX_LOSS_PCT=0.02")
+    ap.add_argument("--max-bid-ask-spread-pct", type=float, help="reject if any selected option leg spread/mid exceeds this fraction; default/env SWARM_MAX_BID_ASK_SPREAD_PCT=0.15")
     ap.add_argument("--provider", help="default LLM provider (anthropic|deepseek|openai|openrouter)")
     ap.add_argument("--model", help="default LLM model")
     ap.add_argument("--save-json", help="path to write full result as JSON (overrides auto-save)")
@@ -160,8 +202,12 @@ def main():
         with_options=args.with_options,
         with_rates=args.with_rates,
         with_news=args.with_news,
+        with_events=args.with_events,
         with_quant=not args.no_quant,
         deep=args.deep,
+        account_size=args.account_size,
+        max_loss_pct=args.max_loss_pct,
+        max_bid_ask_spread_pct=args.max_bid_ask_spread_pct,
         on_event=_print_event,
     )
 
@@ -173,6 +219,9 @@ def main():
         "round1": [v.__dict__ for v in result.round1],
         "round2": [v.__dict__ for v in result.round2],
         "quant": result.quant.__dict__ if result.quant else None,
+        "hard_rules": result.hard_rules,
+        "events": result.events,
+        "event_summary": result.event_summary,
         "consensus": result.consensus,
     }
 

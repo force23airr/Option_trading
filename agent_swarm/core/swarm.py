@@ -18,14 +18,17 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import date
 
 import pandas as pd
 
 from ..analysts import (
     AnalystView,
     BaseAnalyst,
+    EventsAnalyst,
     MacroRatesAnalyst,
     MeanReversionAnalyst,
     NewsAnalyst,
@@ -42,7 +45,7 @@ from ..analysts.quant_strategist import build_candidates
 from . import black_scholes as bs
 from . import data, llm, options as opt, signals
 from .context import DataContext
-from ..data import edgar_source, macro_source, news_source, oi_source, opra_source
+from ..data import edgar_source, events_source, macro_source, news_source, oi_source, opra_source
 
 
 # Order matters only for display
@@ -53,6 +56,7 @@ ALL_ANALYST_CLASSES: list[type[BaseAnalyst]] = [
     VolatilityAnalyst,
     MeanReversionAnalyst,
     MacroRatesAnalyst,
+    EventsAnalyst,
     NewsAnalyst,
     OptionsAnalyst,
 ]
@@ -68,6 +72,9 @@ class SwarmResult:
     round1: list[AnalystView] = field(default_factory=list)
     round2: list[AnalystView] = field(default_factory=list)
     quant: AnalystView | None = None
+    hard_rules: dict = field(default_factory=dict)
+    events: list[dict] = field(default_factory=list)
+    event_summary: dict | None = None
     consensus: dict = field(default_factory=dict)
 
 
@@ -77,6 +84,8 @@ def _run_analyst_view(a: BaseAnalyst, ctx: DataContext, peer_views) -> AnalystVi
         return a.analyze_with_chain(ctx.ticker, ctx.df, ctx.snap, ctx.chain_summary, peer_views=peer_views)
     if isinstance(a, MacroRatesAnalyst):
         return a.analyze_with_rates(ctx, peer_views=peer_views)
+    if isinstance(a, EventsAnalyst):
+        return a.analyze_with_events(ctx, peer_views=peer_views)
     if isinstance(a, NewsAnalyst):
         return a.analyze_with_news(ctx, peer_views=peer_views)
     return a.analyze(ctx.ticker, ctx.df, ctx.snap, peer_views=peer_views)
@@ -286,7 +295,231 @@ Produce a single consensus call. Reply with one JSON object and nothing else:
     return _parse_json_reply(raw) or {"raw": raw}
 
 
-def _build_context(ticker: str, days: int, with_options: bool, with_rates: bool, with_news: bool, emit) -> DataContext:
+def _env_float(name: str, default: float | None = None) -> float | None:
+    raw = os.environ.get(name)
+    if raw in (None, ""):
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _ticket_from_quant(quant_view: AnalystView | None) -> dict:
+    if quant_view is None or not quant_view.raw:
+        return {}
+    parsed = _parse_json_reply(quant_view.raw)
+    ticket = parsed.get("trade_ticket")
+    return ticket if isinstance(ticket, dict) else {}
+
+
+def _leg_spread_checks(ctx: DataContext, ticket: dict, max_spread_pct: float) -> tuple[list[dict], list[str]]:
+    """Check selected option legs against the live chain's bid/ask width."""
+    if ctx.chain_df is None or ctx.chain_df.empty:
+        return [], ["option chain unavailable; bid/ask gate skipped"]
+
+    expiry = str(ticket.get("expiry", ""))
+    legs = ticket.get("legs") or []
+    if not expiry or not legs:
+        return [], ["trade ticket missing expiry/legs; bid/ask gate skipped"]
+
+    checks: list[dict] = []
+    notes: list[str] = []
+    for leg in legs:
+        try:
+            right = str(leg.get("right", "")).upper()
+            strike = float(leg.get("strike"))
+        except (TypeError, ValueError):
+            notes.append(f"malformed leg skipped: {leg}")
+            continue
+
+        rows = ctx.chain_df[
+            (ctx.chain_df["right"].astype(str).str.upper() == right)
+            & (ctx.chain_df["strike"].astype(float).sub(strike).abs() < 0.0001)
+            & (ctx.chain_df["expiry"].astype(str) == expiry)
+        ]
+        if rows.empty:
+            notes.append(f"no quote match for {right} {strike:g} {expiry}; leg spread gate skipped")
+            continue
+
+        row = rows.iloc[0]
+        bid = float(row.get("bid", float("nan")))
+        ask = float(row.get("ask", float("nan")))
+        mid = float(row.get("mid", float("nan")))
+        if not all(math.isfinite(x) and x > 0 for x in (bid, ask, mid)):
+            notes.append(f"bad quote for {right} {strike:g} {expiry}; leg spread gate skipped")
+            continue
+
+        spread_pct = (ask - bid) / mid
+        checks.append({
+            "right": right,
+            "strike": strike,
+            "expiry": expiry,
+            "bid": bid,
+            "ask": ask,
+            "mid": mid,
+            "spread_pct": spread_pct,
+            "threshold_pct": max_spread_pct,
+            "pass": spread_pct <= max_spread_pct,
+        })
+    return checks, notes
+
+
+def _hard_rules_gate(
+    ctx: DataContext,
+    quant_view: AnalystView | None,
+    *,
+    account_size: float | None = None,
+    max_loss_pct: float | None = None,
+    max_bid_ask_spread_pct: float | None = None,
+    earnings_reduce_days: int = 2,
+    contract_multiplier: float | None = None,
+) -> dict:
+    """Deterministic post-coordinator risk gate.
+
+    This does not create a trade idea. It only rejects, reduces, or approves the
+    existing Quant ticket using rules that should never depend on an LLM.
+    """
+    account_size = account_size if account_size is not None else _env_float("SWARM_ACCOUNT_SIZE")
+    max_loss_pct = max_loss_pct if max_loss_pct is not None else _env_float("SWARM_MAX_LOSS_PCT", 0.02)
+    max_bid_ask_spread_pct = (
+        max_bid_ask_spread_pct
+        if max_bid_ask_spread_pct is not None
+        else _env_float("SWARM_MAX_BID_ASK_SPREAD_PCT", 0.15)
+    )
+    contract_multiplier = (
+        contract_multiplier
+        if contract_multiplier is not None
+        else _env_float("SWARM_OPTION_CONTRACT_MULTIPLIER", 100.0)
+    )
+
+    hard_blocks: list[str] = []
+    adjustments: list[str] = []
+    notes: list[str] = []
+    metrics: dict = {
+        "account_size": account_size,
+        "max_loss_pct": max_loss_pct,
+        "max_bid_ask_spread_pct": max_bid_ask_spread_pct,
+        "earnings_reduce_days": earnings_reduce_days,
+        "contract_multiplier": contract_multiplier,
+    }
+
+    ticket = _ticket_from_quant(quant_view)
+    if not ticket:
+        return {
+            "decision": "not_evaluated",
+            "trade_allowed": False,
+            "position_size_multiplier": 0.0,
+            "summary": "No Quant trade ticket was available for hard-rule gating.",
+            "hard_blocks": ["missing quant trade ticket"],
+            "adjustments": [],
+            "notes": [],
+            "metrics": metrics,
+        }
+
+    max_loss = ticket.get("max_loss")
+    try:
+        max_loss = abs(float(max_loss))
+    except (TypeError, ValueError):
+        max_loss = None
+    metrics["ticket_max_loss"] = max_loss
+
+    if max_loss is None or not math.isfinite(max_loss) or max_loss <= 0:
+        hard_blocks.append("trade ticket max_loss missing or invalid")
+    elif account_size and max_loss_pct and contract_multiplier:
+        max_loss_dollars = max_loss * contract_multiplier
+        max_allowed_dollars = account_size * max_loss_pct
+        metrics["max_loss_dollars"] = max_loss_dollars
+        metrics["max_allowed_loss_dollars"] = max_allowed_dollars
+        if max_loss_dollars > max_allowed_dollars:
+            hard_blocks.append(
+                f"max loss ${max_loss_dollars:,.2f} exceeds "
+                f"{max_loss_pct:.1%} account cap (${max_allowed_dollars:,.2f})"
+            )
+    else:
+        notes.append("account_size not set; account-loss cap skipped")
+
+    if max_bid_ask_spread_pct is not None:
+        leg_checks, leg_notes = _leg_spread_checks(ctx, ticket, max_bid_ask_spread_pct)
+        metrics["leg_spread_checks"] = leg_checks
+        notes.extend(leg_notes)
+        failed_legs = [c for c in leg_checks if not c["pass"]]
+        if failed_legs:
+            worst = max(failed_legs, key=lambda c: c["spread_pct"])
+            hard_blocks.append(
+                f"option leg spread {worst['spread_pct']:.1%} exceeds "
+                f"{max_bid_ask_spread_pct:.1%} cap on {worst['right']} {worst['strike']:g}"
+            )
+
+    if ctx.earnings_date:
+        days_to_earnings = (ctx.earnings_date - date.today()).days
+        metrics["days_to_earnings"] = days_to_earnings
+        if 0 <= days_to_earnings < earnings_reduce_days:
+            adjustments.append(
+                f"earnings in {days_to_earnings} day(s); reduce size by 50%"
+            )
+    else:
+        notes.append("earnings_date unavailable; earnings proximity gate skipped")
+
+    event_summary = ctx.event_summary or {}
+    if event_summary:
+        metrics["event_risk_score"] = event_summary.get("event_risk_score", 0)
+        metrics["nearest_event_days"] = event_summary.get("nearest_event_days")
+        metrics["event_rule_actions"] = event_summary.get("rule_actions", [])
+        for action in event_summary.get("rule_actions", []):
+            name = action.get("name", "scheduled event")
+            days = action.get("days_away", "?")
+            kind = action.get("action")
+            if kind == "reject":
+                hard_blocks.append(f"{name} in {days} day(s) has rule_action=reject")
+            elif kind == "watchlist_only":
+                hard_blocks.append(f"{name} in {days} day(s) has rule_action=watchlist_only")
+            elif kind == "reduce_size":
+                adjustments.append(f"{name} in {days} day(s); reduce size by 50%")
+    else:
+        notes.append("event_summary unavailable; scheduled-event gate skipped")
+
+    if hard_blocks:
+        decision = "reject"
+        trade_allowed = False
+        position_size_multiplier = 0.0
+    elif adjustments:
+        decision = "approve_with_reduced_size"
+        trade_allowed = True
+        position_size_multiplier = 0.5
+    else:
+        decision = "approve"
+        trade_allowed = True
+        position_size_multiplier = 1.0
+
+    if hard_blocks:
+        summary = "Rejected by hard rules: " + "; ".join(hard_blocks)
+    elif adjustments:
+        summary = "Approved with reduced size: " + "; ".join(adjustments)
+    else:
+        summary = "Approved by hard rules."
+
+    return {
+        "decision": decision,
+        "trade_allowed": trade_allowed,
+        "position_size_multiplier": position_size_multiplier,
+        "summary": summary,
+        "hard_blocks": hard_blocks,
+        "adjustments": adjustments,
+        "notes": notes,
+        "metrics": metrics,
+    }
+
+
+def _build_context(
+    ticker: str,
+    days: int,
+    with_options: bool,
+    with_rates: bool,
+    with_news: bool,
+    with_events: bool,
+    emit,
+) -> DataContext:
     emit("data:start", ticker=ticker, days=days)
     df = signals.add_indicators(data.fetch_ohlcv(ticker, days=days))
     if df.empty:
@@ -358,6 +591,18 @@ def _build_context(ticker: str, days: int, with_options: bool, with_rates: bool,
         except Exception as exc:
             emit("news:error", error=str(exc))
 
+    if with_events:
+        emit("events:start", ticker=ticker)
+        try:
+            ctx.events = events_source.fetch_events(ticker, lookahead_days=30)
+            ctx.event_summary = events_source.summarize_events(ctx.events)
+            if ctx.events:
+                emit("events:done", count=len(ctx.events), summary=ctx.event_summary)
+            else:
+                emit("events:empty")
+        except Exception as exc:
+            emit("events:error", error=str(exc))
+
     return ctx
 
 
@@ -369,8 +614,12 @@ def run(
     with_options: bool = False,
     with_rates: bool = False,
     with_news: bool = False,
+    with_events: bool = False,
     with_quant: bool = True,
     deep: bool = False,
+    account_size: float | None = None,
+    max_loss_pct: float | None = None,
+    max_bid_ask_spread_pct: float | None = None,
     on_event=None,
 ) -> SwarmResult:
     """Run the swarm.
@@ -383,7 +632,7 @@ def run(
         if on_event:
             on_event(et, payload)
 
-    ctx = _build_context(ticker, days, with_options, with_rates, with_news, emit)
+    ctx = _build_context(ticker, days, with_options, with_rates, with_news, with_events, emit)
 
     classes = analyst_classes or ALL_ANALYST_CLASSES
     spawned: list[BaseAnalyst] = []
@@ -391,6 +640,7 @@ def run(
     skip_reasons = {
         OptionsAnalyst: "needs option chain",
         MacroRatesAnalyst: "needs --with-rates",
+        EventsAnalyst: "needs --with-events (no scheduled events fetched)",
         NewsAnalyst: "needs --with-news (no headlines fetched)",
     }
     for cls in classes:
@@ -444,6 +694,16 @@ def run(
         consensus["ticket_substituted"] = bool(conflict_meta.get("substituted"))
     emit("coordinator:done", consensus=consensus)
 
+    hard_rules = _hard_rules_gate(
+        ctx,
+        quant_view,
+        account_size=account_size,
+        max_loss_pct=max_loss_pct,
+        max_bid_ask_spread_pct=max_bid_ask_spread_pct,
+    )
+    consensus["hard_rules"] = hard_rules
+    emit("rules:done", hard_rules=hard_rules)
+
     return SwarmResult(
         ticker=ticker,
         snapshot=ctx.snap,
@@ -452,5 +712,8 @@ def run(
         round1=round1,
         round2=round2,
         quant=quant_view,
+        hard_rules=hard_rules,
+        events=ctx.events,
+        event_summary=ctx.event_summary,
         consensus=consensus,
     )

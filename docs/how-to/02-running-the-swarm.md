@@ -46,12 +46,55 @@ Adds:
 | `--days N` | 180 | Days of OHLCV history. **Use 365+** for MA200 / 52w extremes to populate. |
 | `--with-options` | off | Pull live OPRA chain + spawn Options Analyst + Quant Strategist |
 | `--with-rates` | off | Pull Treasury yield curve + spawn Macro Rates Analyst |
+| `--with-events` | off | Pull structured scheduled events + earnings and spawn Events Analyst |
 | `--no-debate` | off | Skip Round 2 (single-pass; faster but lower quality) |
 | `--no-quant` | off | Skip the Quant Strategist (rare; only for testing) |
+| `--account-size N` | env | Account value used by the deterministic hard-rules max-loss cap |
+| `--max-loss-pct X` | `0.02` | Reject if ticket max loss exceeds this account fraction |
+| `--max-bid-ask-spread-pct X` | `0.15` | Reject if any selected option leg spread/mid exceeds this fraction |
 | `--no-report` | off | Skip the auto-saved `.txt` report |
 | `--provider X` | env default | Override default LLM provider for analysts that don't pin one |
 | `--model X` | env default | Override default model |
 | `--save-json PATH` | auto | Override the auto-saved JSON path |
+
+## Hard-rules gate
+
+Every run now applies a deterministic post-coordinator gate to the Quant ticket.
+This is not an LLM analyst. It blocks or modifies trades using fixed rules:
+
+- Reject if any selected option leg's bid/ask spread is wider than the configured cap.
+- Reject if ticket max loss exceeds `account_size * max_loss_pct`.
+- Reduce size by 50% if earnings are inside the near-event window.
+- Apply `reject`, `watchlist_only`, or `reduce_size` actions from structured events.
+
+Account size can be passed on the command line:
+
+```
+/opt/anaconda3/bin/python -m agent_swarm.tools.run_swarm COIN --with-options --with-news --account-size 25000 --max-loss-pct 0.01
+```
+
+Or via environment:
+
+```
+SWARM_ACCOUNT_SIZE=25000
+SWARM_MAX_LOSS_PCT=0.01
+SWARM_MAX_BID_ASK_SPREAD_PCT=0.12
+```
+
+## Events calendar
+
+`--with-events` builds a structured event calendar from:
+
+- earnings date from yfinance, when available
+- optional local JSON calendar at `data_cache/events_calendar.json`
+- optional override path via `SWARM_EVENTS_CALENDAR`
+
+Use [events-calendar.example.json](../reference/events-calendar.example.json) as
+the schema reference. Broad macro events use `"scope": "macro"` or `"market"`.
+Ticker-specific events use `"scope": "ticker"` and a `tickers` list. The
+`rule_action` field can be `reduce_size`, `watchlist_only`, or `reject`; use
+`action_window_days` to control how close the event must be before the hard
+rules apply the action.
 
 ## Recommended commands by use case
 
@@ -60,6 +103,7 @@ Adds:
 | Quick read on a stock | `run_swarm TSLA --days 365` |
 | Full analysis with options structure | `run_swarm TSLA --days 365 --with-options` |
 | Full analysis + macro context | `run_swarm TSLA --days 365 --with-options --with-rates` |
+| Full analysis + calendar risk | `run_swarm TSLA --days 365 --with-options --with-events --account-size 25000` |
 | Cheapest possible run | `run_swarm TSLA --days 180 --no-debate --no-quant` |
 | Force everything through one provider | `run_swarm TSLA --provider deepseek --with-options` |
 

@@ -1,0 +1,35 @@
+{
+  "events": [
+    {
+      "name": "Example CPI release",
+      "date": "2026-05-13",
+      "scope": "macro",
+      "importance": 5,
+      "risk": "market-wide inflation surprise; index and rates volatility",
+      "rule_action": "reduce_size",
+      "action_window_days": 2,
+      "source": "manual_calendar"
+    },
+    {
+      "name": "Example FOMC rate decision",
+      "date": "2026-06-17",
+      "scope": "macro",
+      "importance": 5,
+      "risk": "rates repricing, dollar move, broad index volatility",
+      "rule_action": "reduce_size",
+      "action_window_days": 2,
+      "source": "manual_calendar"
+    },
+    {
+      "name": "Example FDA decision",
+      "date": "2026-07-10",
+      "scope": "ticker",
+      "tickers": ["EXAMPLE"],
+      "importance": 5,
+      "risk": "binary company-specific regulatory event",
+      "rule_action": "reject",
+      "action_window_days": 1,
+      "source": "manual_calendar"
+    }
+  ]
+}

@@ -157,6 +157,20 @@ def render(data, title: str = "", raw_for: str | None = None, out=None) -> None:
             for line in (quant.get("raw") or "").splitlines():
                 p(f"    {line}")
 
+    events = data.get("events") or []
+    event_summary = data.get("event_summary") or {}
+    if events:
+        p(f"\n{'═' * 80}")
+        p(f"  SCHEDULED EVENTS:  {len(events)} event(s), risk score {event_summary.get('event_risk_score', 0)}")
+        p("═" * 80)
+        for event in events[:12]:
+            p(_wrap(
+                f"• {event.get('date')} ({event.get('days_away')}d) "
+                f"{event.get('name')} — importance {event.get('importance')}/5; "
+                f"{event.get('risk', '')}",
+                indent="    ",
+            ))
+
     c = data.get("consensus") or {}
     if c:
         p(f"\n{'═' * 80}")
@@ -183,6 +197,29 @@ def render(data, title: str = "", raw_for: str | None = None, out=None) -> None:
         if c.get("rationale"):
             p(f"\n  Rationale:")
             p(_wrap(c["rationale"], indent="    "))
+        p()
+
+    gate = data.get("hard_rules")
+    if not gate and c:
+        gate = c.get("hard_rules")
+    if gate:
+        p(f"\n{'═' * 80}")
+        p(f"  HARD RULES:  {str(gate.get('decision', '?')).upper()}")
+        p("═" * 80)
+        p(_wrap(gate.get("summary", ""), indent="  "))
+        p(f"  Trade allowed: {gate.get('trade_allowed')}  Size x{gate.get('position_size_multiplier', 0):.2f}")
+        if gate.get("hard_blocks"):
+            p(f"\n  Blocks:")
+            for block in gate["hard_blocks"]:
+                p(_wrap(f"• {block}", indent="    "))
+        if gate.get("adjustments"):
+            p(f"\n  Adjustments:")
+            for adj in gate["adjustments"]:
+                p(_wrap(f"• {adj}", indent="    "))
+        if gate.get("notes"):
+            p(f"\n  Notes:")
+            for note in gate["notes"]:
+                p(_wrap(f"• {note}", indent="    "))
         p()
 
 

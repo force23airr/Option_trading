@@ -29,6 +29,8 @@ class DataContext:
     yield_summary: dict | None = None
     news: list[dict] = field(default_factory=list)
     earnings_date: date | None = None
+    events: list[dict] = field(default_factory=list)
+    event_summary: dict | None = None
 
     @property
     def has_options(self) -> bool:
@@ -45,6 +47,10 @@ class DataContext:
     @property
     def has_news(self) -> bool:
         return bool(self.news)
+
+    @property
+    def has_events(self) -> bool:
+        return bool(self.events)
 
     @property
     def has_long_history(self) -> bool:
