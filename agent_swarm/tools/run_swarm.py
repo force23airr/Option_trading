@@ -226,6 +226,7 @@ def main():
         "hard_rules": result.hard_rules,
         "events": result.events,
         "event_summary": result.event_summary,
+        "options_summary": result.options_summary,
         "consensus": result.consensus,
     }
 

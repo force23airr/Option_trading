@@ -75,6 +75,7 @@ class SwarmResult:
     hard_rules: dict = field(default_factory=dict)
     events: list[dict] = field(default_factory=list)
     event_summary: dict | None = None
+    options_summary: dict | None = None
     consensus: dict = field(default_factory=dict)
 
 
@@ -727,6 +728,20 @@ def run(
     consensus["hard_rules"] = hard_rules
     emit("rules:done", hard_rules=hard_rules)
 
+    options_summary = None
+    if ctx.chain_summary is not None:
+        cs = ctx.chain_summary
+        options_summary = {
+            "spot": getattr(cs, "spot", ctx.spot),
+            "iv_rv_spread": getattr(cs, "iv_rv_spread", None),
+            "realized_vol_30d": getattr(cs, "realized_vol_30d", None),
+            "realized_vol_60d": getattr(cs, "realized_vol_60d", None),
+            "atm_iv_by_expiry": getattr(cs, "atm_iv_by_expiry", {}) or {},
+            "skew_by_expiry": getattr(cs, "skew_by_expiry", {}) or {},
+            "oi_levels": getattr(cs, "oi_levels", []) or [],
+            "contracts": int(len(ctx.chain_df)) if ctx.chain_df is not None else 0,
+        }
+
     return SwarmResult(
         ticker=ticker,
         snapshot=ctx.snap,
@@ -738,5 +753,6 @@ def run(
         hard_rules=hard_rules,
         events=ctx.events,
         event_summary=ctx.event_summary,
+        options_summary=options_summary,
         consensus=consensus,
     )
