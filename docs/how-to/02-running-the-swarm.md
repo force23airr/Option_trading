@@ -52,6 +52,8 @@ Adds:
 | `--account-size N` | env | Account value used by the deterministic hard-rules max-loss cap |
 | `--max-loss-pct X` | `0.02` | Reject if ticket max loss exceeds this account fraction |
 | `--max-bid-ask-spread-pct X` | `0.15` | Reject if any selected option leg spread/mid exceeds this fraction |
+| `--earnings-reduce-days N` | `5` | Reduce size 50% if earnings within this many days |
+| `--max-event-risk-score X` | unset | Reject if `event_risk_score` exceeds this 0–100 cap (off when unset) |
 | `--no-report` | off | Skip the auto-saved `.txt` report |
 | `--provider X` | env default | Override default LLM provider for analysts that don't pin one |
 | `--model X` | env default | Override default model |
@@ -64,8 +66,11 @@ This is not an LLM analyst. It blocks or modifies trades using fixed rules:
 
 - Reject if any selected option leg's bid/ask spread is wider than the configured cap.
 - Reject if ticket max loss exceeds `account_size * max_loss_pct`.
-- Reduce size by 50% if earnings are inside the near-event window.
+- Reduce size by 50% if earnings are inside the near-event window
+  (`SWARM_EARNINGS_REDUCE_DAYS`, default 5).
 - Apply `reject`, `watchlist_only`, or `reduce_size` actions from structured events.
+- Reject if the aggregate `event_risk_score` exceeds `SWARM_MAX_EVENT_RISK_SCORE`
+  when set (0–100; off by default).
 
 Account size can be passed on the command line:
 
@@ -79,6 +84,8 @@ Or via environment:
 SWARM_ACCOUNT_SIZE=25000
 SWARM_MAX_LOSS_PCT=0.01
 SWARM_MAX_BID_ASK_SPREAD_PCT=0.12
+SWARM_EARNINGS_REDUCE_DAYS=5
+SWARM_MAX_EVENT_RISK_SCORE=85
 ```
 
 ## Events calendar

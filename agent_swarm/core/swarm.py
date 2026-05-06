@@ -99,15 +99,22 @@ def _run_round(analysts: list[BaseAnalyst], ctx: DataContext, peer_views) -> lis
         return [f.result() for f in futs]
 
 
+_NON_DIRECTIONAL_ANALYSTS = {"Events Analyst"}
+
+
 def _peer_directional_score(views: list[AnalystView]) -> float:
     """Confidence-weighted directional score over peer analysts.
 
     +1.0 = strong bullish consensus, -1.0 = strong bearish, 0 = mixed.
     Neutral stances contribute to weight (denominator) but not the score.
+    Risk-only analysts (e.g. Events) are excluded — their stance reflects
+    event risk, not direction, and would skew the consensus.
     """
     score = 0.0
     weight = 0.0
     for v in views:
+        if v.analyst in _NON_DIRECTIONAL_ANALYSTS:
+            continue
         c = float(v.confidence or 0)
         if c <= 0:
             continue
@@ -372,7 +379,8 @@ def _hard_rules_gate(
     account_size: float | None = None,
     max_loss_pct: float | None = None,
     max_bid_ask_spread_pct: float | None = None,
-    earnings_reduce_days: int = 2,
+    earnings_reduce_days: int | None = None,
+    max_event_risk_score: float | None = None,
     contract_multiplier: float | None = None,
 ) -> dict:
     """Deterministic post-coordinator risk gate.
@@ -392,6 +400,11 @@ def _hard_rules_gate(
         if contract_multiplier is not None
         else _env_float("SWARM_OPTION_CONTRACT_MULTIPLIER", 100.0)
     )
+    if earnings_reduce_days is None:
+        env_val = _env_float("SWARM_EARNINGS_REDUCE_DAYS", 5)
+        earnings_reduce_days = int(env_val) if env_val is not None else 5
+    if max_event_risk_score is None:
+        max_event_risk_score = _env_float("SWARM_MAX_EVENT_RISK_SCORE")
 
     hard_blocks: list[str] = []
     adjustments: list[str] = []
@@ -401,6 +414,7 @@ def _hard_rules_gate(
         "max_loss_pct": max_loss_pct,
         "max_bid_ask_spread_pct": max_bid_ask_spread_pct,
         "earnings_reduce_days": earnings_reduce_days,
+        "max_event_risk_score": max_event_risk_score,
         "contract_multiplier": contract_multiplier,
     }
 
@@ -463,7 +477,8 @@ def _hard_rules_gate(
 
     event_summary = ctx.event_summary or {}
     if event_summary:
-        metrics["event_risk_score"] = event_summary.get("event_risk_score", 0)
+        score = event_summary.get("event_risk_score", 0) or 0
+        metrics["event_risk_score"] = score
         metrics["nearest_event_days"] = event_summary.get("nearest_event_days")
         metrics["event_rule_actions"] = event_summary.get("rule_actions", [])
         for action in event_summary.get("rule_actions", []):
@@ -476,6 +491,10 @@ def _hard_rules_gate(
                 hard_blocks.append(f"{name} in {days} day(s) has rule_action=watchlist_only")
             elif kind == "reduce_size":
                 adjustments.append(f"{name} in {days} day(s); reduce size by 50%")
+        if max_event_risk_score is not None and score > max_event_risk_score:
+            hard_blocks.append(
+                f"event risk score {score} exceeds cap {max_event_risk_score:g}"
+            )
     else:
         notes.append("event_summary unavailable; scheduled-event gate skipped")
 
@@ -620,6 +639,8 @@ def run(
     account_size: float | None = None,
     max_loss_pct: float | None = None,
     max_bid_ask_spread_pct: float | None = None,
+    earnings_reduce_days: int | None = None,
+    max_event_risk_score: float | None = None,
     on_event=None,
 ) -> SwarmResult:
     """Run the swarm.
@@ -700,6 +721,8 @@ def run(
         account_size=account_size,
         max_loss_pct=max_loss_pct,
         max_bid_ask_spread_pct=max_bid_ask_spread_pct,
+        earnings_reduce_days=earnings_reduce_days,
+        max_event_risk_score=max_event_risk_score,
     )
     consensus["hard_rules"] = hard_rules
     emit("rules:done", hard_rules=hard_rules)

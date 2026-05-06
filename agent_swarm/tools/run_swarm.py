@@ -180,6 +180,8 @@ def main():
     ap.add_argument("--account-size", type=float, help="account value for hard-rule max-loss cap; also supports SWARM_ACCOUNT_SIZE")
     ap.add_argument("--max-loss-pct", type=float, help="reject if ticket max loss exceeds this account fraction; default/env SWARM_MAX_LOSS_PCT=0.02")
     ap.add_argument("--max-bid-ask-spread-pct", type=float, help="reject if any selected option leg spread/mid exceeds this fraction; default/env SWARM_MAX_BID_ASK_SPREAD_PCT=0.15")
+    ap.add_argument("--earnings-reduce-days", type=int, help="reduce size 50%% if earnings within this many days; default/env SWARM_EARNINGS_REDUCE_DAYS=5")
+    ap.add_argument("--max-event-risk-score", type=float, help="reject if event_risk_score exceeds this 0-100 cap; default/env SWARM_MAX_EVENT_RISK_SCORE (off when unset)")
     ap.add_argument("--provider", help="default LLM provider (anthropic|deepseek|openai|openrouter)")
     ap.add_argument("--model", help="default LLM model")
     ap.add_argument("--save-json", help="path to write full result as JSON (overrides auto-save)")
@@ -208,6 +210,8 @@ def main():
         account_size=args.account_size,
         max_loss_pct=args.max_loss_pct,
         max_bid_ask_spread_pct=args.max_bid_ask_spread_pct,
+        earnings_reduce_days=args.earnings_reduce_days,
+        max_event_risk_score=args.max_event_risk_score,
         on_event=_print_event,
     )
 
