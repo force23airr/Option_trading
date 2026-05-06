@@ -45,6 +45,15 @@ def _short_dte_chain(chain: pd.DataFrame, max_dte: int = 45) -> pd.DataFrame:
     return chain[(chain["dte"] > 0) & (chain["dte"] <= max_dte)].copy()
 
 
+def _fmt_strike(k: float) -> str:
+    """Format a strike for display: 32.5 stays 32.5, 40.0 becomes 40.
+
+    Why: prior `:.0f` formatter truncated half-strikes (e.g. 32.5 → "32"),
+    making titles disagree with the legs/breakeven math.
+    """
+    return f"{float(k):g}"
+
+
 def _atm_strikes(chain: pd.DataFrame, spot: float, n: int = 1) -> list[float]:
     strikes = sorted(chain["strike"].unique())
     if not strikes:
@@ -115,7 +124,7 @@ def build_candidates(chain: pd.DataFrame, spot: float, max_dte: int = 45) -> lis
         net_theta = -short_call["theta"] + long_call["theta"] - short_put["theta"] + long_put["theta"]
         pop = 1.0 - (abs(short_call["delta"]) + abs(short_put["delta"]))
         out.append(StructureCandidate(
-            name=f"{expiry_str} {long_put['strike']:.0f}/{short_put['strike']:.0f}/{short_call['strike']:.0f}/{long_call['strike']:.0f} Iron Condor",
+            name=f"{expiry_str} {_fmt_strike(long_put['strike'])}/{_fmt_strike(short_put['strike'])}/{_fmt_strike(short_call['strike'])}/{_fmt_strike(long_call['strike'])} Iron Condor",
             expiry=expiry_str,
             legs=[
                 {"right": "P", "strike": float(long_put["strike"]), "side": "long", "mid": float(long_put["mid"])},
@@ -142,7 +151,7 @@ def build_candidates(chain: pd.DataFrame, spot: float, max_dte: int = 45) -> lis
         max_loss = width - credit
         be = float(short_put["strike"]) - credit
         out.append(StructureCandidate(
-            name=f"{expiry_str} {long_put['strike']:.0f}/{short_put['strike']:.0f} Put Credit Spread",
+            name=f"{expiry_str} {_fmt_strike(long_put['strike'])}/{_fmt_strike(short_put['strike'])} Put Credit Spread",
             expiry=expiry_str,
             legs=[
                 {"right": "P", "strike": float(long_put["strike"]), "side": "long", "mid": float(long_put["mid"])},
@@ -166,7 +175,7 @@ def build_candidates(chain: pd.DataFrame, spot: float, max_dte: int = 45) -> lis
         max_loss = width - credit
         be = float(short_call["strike"]) + credit
         out.append(StructureCandidate(
-            name=f"{expiry_str} {short_call['strike']:.0f}/{long_call['strike']:.0f} Call Credit Spread",
+            name=f"{expiry_str} {_fmt_strike(short_call['strike'])}/{_fmt_strike(long_call['strike'])} Call Credit Spread",
             expiry=expiry_str,
             legs=[
                 {"right": "C", "strike": float(short_call["strike"]), "side": "short", "mid": float(short_call["mid"])},
@@ -190,7 +199,7 @@ def build_candidates(chain: pd.DataFrame, spot: float, max_dte: int = 45) -> lis
         max_profit = width - debit
         be = float(atm_call_long["strike"]) + debit
         out.append(StructureCandidate(
-            name=f"{expiry_str} {atm_call_long['strike']:.0f}/{atm_call_short['strike']:.0f} Call Debit Spread",
+            name=f"{expiry_str} {_fmt_strike(atm_call_long['strike'])}/{_fmt_strike(atm_call_short['strike'])} Call Debit Spread",
             expiry=expiry_str,
             legs=[
                 {"right": "C", "strike": float(atm_call_long["strike"]), "side": "long", "mid": float(atm_call_long["mid"])},

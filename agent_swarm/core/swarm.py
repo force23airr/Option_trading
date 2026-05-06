@@ -17,6 +17,7 @@ Provider routing:
 from __future__ import annotations
 
 import json
+import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
@@ -36,6 +37,8 @@ from ..analysts import (
     VolumeAnalyst,
 )
 from ..analysts.options_analyst import summarize_chain
+from ..analysts.base import _parse_json_reply
+from ..analysts.quant_strategist import build_candidates
 from . import black_scholes as bs
 from . import data, llm, options as opt, signals
 from .context import DataContext
@@ -85,6 +88,150 @@ def _run_round(analysts: list[BaseAnalyst], ctx: DataContext, peer_views) -> lis
     with ThreadPoolExecutor(max_workers=len(analysts)) as ex:
         futs = [ex.submit(_run_analyst_view, a, ctx, peer_views) for a in analysts]
         return [f.result() for f in futs]
+
+
+def _peer_directional_score(views: list[AnalystView]) -> float:
+    """Confidence-weighted directional score over peer analysts.
+
+    +1.0 = strong bullish consensus, -1.0 = strong bearish, 0 = mixed.
+    Neutral stances contribute to weight (denominator) but not the score.
+    """
+    score = 0.0
+    weight = 0.0
+    for v in views:
+        c = float(v.confidence or 0)
+        if c <= 0:
+            continue
+        weight += c
+        s = (v.stance or "").lower()
+        if "bull" in s:
+            score += c
+        elif "bear" in s:
+            score -= c
+    return score / weight if weight > 0 else 0.0
+
+
+def _reconcile_ticket(
+    ctx: DataContext,
+    peer_views: list[AnalystView],
+    quant_view: AnalystView | None,
+) -> tuple[AnalystView | None, dict | None]:
+    """Hard gate ensuring the Quant ticket's net delta agrees with peer
+    directional consensus. If they disagree past thresholds, try to swap to
+    a candidate matching the consensus direction with the same vega sign
+    (preserving the vol-regime thesis). Otherwise flag the conflict.
+    """
+    if quant_view is None or not quant_view.raw:
+        return quant_view, None
+    if ctx.chain_df is None or ctx.chain_df.empty:
+        return quant_view, None
+
+    parsed = _parse_json_reply(quant_view.raw)
+    ticket = parsed.get("trade_ticket") or {}
+    net_delta = ticket.get("net_delta")
+    quant_vega = ticket.get("net_vega") or 0
+    if net_delta is None:
+        return quant_view, None
+
+    score = _peer_directional_score(peer_views)
+    bull_consensus = score >= 0.40
+    bear_consensus = score <= -0.40
+    bull_ticket = float(net_delta) >= 0.05
+    bear_ticket = float(net_delta) <= -0.05
+    conflict = (bull_consensus and bear_ticket) or (bear_consensus and bull_ticket)
+    if not conflict:
+        return quant_view, None
+
+    desired_delta_sign = 1 if bull_consensus else -1
+    desired_vega_sign = 0 if abs(quant_vega) < 0.001 else (1 if quant_vega > 0 else -1)
+
+    def _finite(*xs) -> bool:
+        for x in xs:
+            if x is None:
+                return False
+            try:
+                if not math.isfinite(float(x)):
+                    return False
+            except (TypeError, ValueError):
+                return False
+        return True
+
+    candidates = build_candidates(ctx.chain_df, spot=ctx.spot)
+    eligible = []
+    for c in candidates:
+        if c.name == quant_view.pattern:
+            continue
+        # Skip candidates with non-finite financials — typically from deep-OTM
+        # legs whose bid/ask is missing, producing NaN mid → NaN credit/max_loss.
+        if not _finite(c.net_credit_or_debit, c.max_profit, c.max_loss,
+                       c.net_delta, c.net_vega):
+            continue
+        if c.max_loss <= 0:
+            continue
+        delta_sign = 0 if abs(c.net_delta) < 0.05 else (1 if c.net_delta > 0 else -1)
+        if delta_sign != desired_delta_sign:
+            continue
+        if desired_vega_sign != 0:
+            vega_sign = 0 if abs(c.net_vega) < 0.001 else (1 if c.net_vega > 0 else -1)
+            if vega_sign != desired_vega_sign:
+                continue
+        eligible.append(c)
+
+    original = parsed.get("selected_structure", quant_view.pattern or "?")
+    if not eligible:
+        return quant_view, {
+            "conflict_flag": True,
+            "substituted": False,
+            "conflict_note": (
+                f"Quant ticket '{original}' (net_delta={net_delta:+.3f}) "
+                f"contradicts peer consensus (score={score:+.2f}); no candidate "
+                f"with matching vega sign found — ticket kept but FLAGGED."
+            ),
+        }
+
+    best = max(eligible, key=lambda c: (c.reward_to_risk, c.pop_estimate))
+    new_view = AnalystView(
+        analyst=quant_view.analyst,
+        ticker=quant_view.ticker,
+        stance="bullish" if desired_delta_sign > 0 else "bearish",
+        confidence=quant_view.confidence,
+        summary=(
+            f"[reconciled] Original pick '{original}' had net_delta={net_delta:+.3f} "
+            f"vs peer consensus={score:+.2f}; swapped to {best.name} to align "
+            f"direction while preserving vega sign."
+        ),
+        observations=[
+            f"Selected: {best.name}",
+            f"Cash flow: ${best.net_credit_or_debit:+.2f}/contract",
+            f"Max profit: ${best.max_profit:+.2f}",
+            f"Max loss: ${best.max_loss:+.2f}",
+            f"Breakevens: [{best.breakeven_lo}, {best.breakeven_hi}]",
+            f"POP estimate: {best.pop_estimate * 100:.0f}%",
+            f"net_delta: {best.net_delta:+.3f}",
+            f"net_vega: {best.net_vega:+.3f}",
+            f"net_theta: {best.net_theta:+.3f}",
+            f"Reconciliation: replaced original '{original}' due to delta/consensus conflict.",
+        ],
+        pattern=best.name,
+        horizon=quant_view.horizon,
+        raw=quant_view.raw,
+        provider=quant_view.provider,
+        model=quant_view.model,
+    )
+    return new_view, {
+        "conflict_flag": True,
+        "substituted": True,
+        "original_ticket": original,
+        "new_ticket": best.name,
+        "peer_score": score,
+        "original_net_delta": float(net_delta),
+        "new_net_delta": float(best.net_delta),
+        "conflict_note": (
+            f"Quant chose '{original}' (Δ={net_delta:+.3f}) but peer "
+            f"consensus score={score:+.2f}. Auto-substituted to '{best.name}' "
+            f"(Δ={best.net_delta:+.3f})."
+        ),
+    }
 
 
 COORDINATOR_SYSTEM = (
@@ -283,8 +430,18 @@ def run(
         except Exception as exc:
             emit("quant:error", error=str(exc))
 
+    conflict_meta = None
+    if quant_view is not None:
+        quant_view, conflict_meta = _reconcile_ticket(ctx, final_views, quant_view)
+        if conflict_meta:
+            emit("reconcile:conflict", **conflict_meta)
+
     emit("coordinator:start")
     consensus = _coordinator(ctx, final_views, quant_view)
+    if conflict_meta:
+        consensus["conflict_flag"] = bool(conflict_meta.get("conflict_flag"))
+        consensus["conflict_note"] = conflict_meta.get("conflict_note", "")
+        consensus["ticket_substituted"] = bool(conflict_meta.get("substituted"))
     emit("coordinator:done", consensus=consensus)
 
     return SwarmResult(

@@ -86,6 +86,20 @@ def _print_event(et: str, payload: dict) -> None:
             print(f"     • {o}")
     elif et == "quant:error":
         print(f"   quant strategist failed: {payload['error']}")
+    elif et == "reconcile:conflict":
+        if payload.get("substituted"):
+            print(
+                f"\n⚠️  RECONCILE: peer consensus score "
+                f"{payload.get('peer_score', 0):+.2f} disagreed with quant ticket "
+                f"(Δ={payload.get('original_net_delta', 0):+.3f})."
+            )
+            print(
+                f"   Substituted: '{payload.get('original_ticket','')}' "
+                f"→ '{payload.get('new_ticket','')}' "
+                f"(Δ={payload.get('new_net_delta', 0):+.3f})"
+            )
+        else:
+            print(f"\n⚠️  RECONCILE FLAG: {payload.get('conflict_note','')}")
     elif et == "coordinator:start":
         print("\n🎯 coordinator synthesizing...")
     elif et == "coordinator:done":
@@ -106,6 +120,9 @@ def _print_event(et: str, payload: dict) -> None:
                 print(f"    • {d}")
         print(f"\n  Horizon:   {c.get('horizon','')}")
         print(f"  Structure: {c.get('suggested_structure','')}")
+        if c.get("conflict_flag"):
+            tag = "[SUBSTITUTED]" if c.get("ticket_substituted") else "[FLAGGED]"
+            print(f"  Conflict:  {tag} {c.get('conflict_note','')}")
         print(f"\n  Rationale: {c.get('rationale','')}")
         print("=" * 70)
 
