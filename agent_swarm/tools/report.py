@@ -39,6 +39,151 @@ def _wrap(s: str, width: int = 78, indent: str = "      ") -> str:
     return textwrap.fill(s, width=width, initial_indent=indent, subsequent_indent=indent)
 
 
+def _conf_bar(conf: float | None, cells: int = 5) -> str:
+    try:
+        c = float(conf or 0)
+    except (TypeError, ValueError):
+        c = 0.0
+    filled = max(0, min(cells, round(c * cells)))
+    return "█" * filled + "░" * (cells - filled)
+
+
+_STANCE_ALIASES = {
+    "directional_bullish": "dir-bull",
+    "directional_bearish": "dir-bear",
+}
+
+
+def _stance_short(view: dict, max_len: int = 10) -> str:
+    s = (view.get("stance") or "?").lower()
+    s = _STANCE_ALIASES.get(s, s)
+    return s[:max_len]
+
+
+_SENTENCE_SPLIT = re.compile(r"\.(?=\s|$)")
+
+
+def _summary_short(view: dict, width: int = 38) -> str:
+    s = (view.get("summary") or "").strip()
+    if not s:
+        return ""
+    # Split on period followed by whitespace/end so decimals (29.41) don't break
+    first = _SENTENCE_SPLIT.split(s, maxsplit=1)[0].strip()
+    return (first[: width - 1] + "…") if len(first) > width else first
+
+
+def _ticket_field(observations: list, needle: str) -> str:
+    for o in observations or []:
+        if needle.lower() in o.lower():
+            return o.split(":", 1)[-1].strip()
+    return ""
+
+
+def render_verdict_panel(data: dict, out=None) -> None:
+    """At-a-glance panel: every analyst's stance + gates + final disposition.
+
+    Prints both at the top of the saved .txt report and on the live CLI after
+    the swarm finishes. The detailed transcript still follows below it.
+    """
+    if out is None:
+        out = sys.stdout
+
+    def p(*args, **kwargs):
+        print(*args, file=out, **kwargs)
+
+    consensus = data.get("consensus") or {}
+    quant = data.get("quant")
+    gate = data.get("hard_rules") or consensus.get("hard_rules") or {}
+    views = data.get("round2") or data.get("round1") or []
+
+    ticker = data.get("ticker", "?")
+    final_stance = str(consensus.get("consensus_stance", "?")).upper()
+    final_conf = consensus.get("consensus_confidence", 0) or 0
+
+    p("═" * 80)
+    header = f"  AGENT VERDICTS — {ticker}"
+    suffix = f"CONSENSUS: {final_stance} {final_conf:.0%}"
+    pad = max(1, 80 - len(header) - len(suffix) - 2)
+    p(f"{header}{' ' * pad}{suffix}  ")
+    p("═" * 80)
+
+    for v in views:
+        name = v.get("analyst", "?")
+        stance = _stance_short(v)
+        try:
+            conf = float(v.get("confidence") or 0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        bar = _conf_bar(conf)
+        summary = _summary_short(v)
+        p(f"  {name:<22} {bar}  {stance:<10} {conf:>4.0%}  {summary}")
+
+    p("  " + "─" * 76)
+
+    if quant:
+        obs = quant.get("observations") or []
+        delta = _ticket_field(obs, "net_delta")
+        max_loss = _ticket_field(obs, "max loss")
+        structure = (quant.get("pattern") or "?").lstrip("# ").strip() or "?"
+        delta_str = f"Δ{delta}" if delta else "Δ?"
+        line = f"  {'Quant Strategist':<22} {delta_str:<10}  {structure}"
+        if max_loss:
+            line += f"   max loss {max_loss}"
+        p(line)
+
+    if consensus.get("conflict_flag"):
+        if consensus.get("ticket_substituted"):
+            mark = "↻ substituted"
+        else:
+            mark = "⚠ flagged"
+        note = consensus.get("conflict_note", "")
+        p(f"  {'Reconcile':<22} {mark}")
+        if note:
+            p(_wrap(note, indent="                           "))
+    elif quant:
+        p(f"  {'Reconcile':<22} ✓ aligned")
+
+    decision = ""
+    if gate:
+        decision = str(gate.get("decision", "?")).upper()
+        size = gate.get("position_size_multiplier", 1.0) or 0.0
+        marks = {
+            "REJECT": "✗ REJECT",
+            "APPROVE": "✓ APPROVE",
+            "APPROVE_WITH_REDUCED_SIZE": f"~ reduce → x{size:.2f}",
+            "NOT_EVALUATED": "— not evaluated",
+        }
+        mark = marks.get(decision, decision)
+        p(f"  {'Hard Rules':<22} {mark}")
+        for b in (gate.get("hard_blocks") or []):
+            p(f"  {'':<22}   • {b}")
+        for a in (gate.get("adjustments") or []):
+            p(f"  {'':<22}   • {a}")
+
+    p("  " + "─" * 76)
+
+    if gate and gate.get("trade_allowed") is False:
+        final_line = (
+            f"FINAL: trade BLOCKED  "
+            f"(consensus {final_stance.lower()} {final_conf:.0%}; gate {decision.lower() or '—'})"
+        )
+    elif gate and gate.get("trade_allowed") and (gate.get("position_size_multiplier") or 0) < 1.0:
+        final_line = (
+            f"FINAL: trade APPROVED at reduced size  "
+            f"(consensus {final_stance.lower()} {final_conf:.0%})"
+        )
+    elif gate and gate.get("trade_allowed"):
+        final_line = (
+            f"FINAL: trade APPROVED  "
+            f"(consensus {final_stance.lower()} {final_conf:.0%})"
+        )
+    else:
+        final_line = f"FINAL: consensus {final_stance.lower()} {final_conf:.0%} (no trade ticket)"
+    p(f"  {final_line}")
+    p("═" * 80)
+    p()
+
+
 _STRUCTURE_SHORTNAMES: list[tuple[str, str]] = [
     ("iron condor", "iron-condor"),
     ("iron butterfly", "iron-butterfly"),
@@ -97,6 +242,8 @@ def render(data, title: str = "", raw_for: str | None = None, out=None) -> None:
     p("=" * 80)
     p(f"  {title or 'swarm run'}   ticker={data['ticker']}")
     p("=" * 80)
+    p()
+    render_verdict_panel(data, out=out)
 
     snap = data.get("snapshot", {})
     if snap:

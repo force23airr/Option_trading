@@ -229,6 +229,9 @@ def main():
         "consensus": result.consensus,
     }
 
+    print()
+    report_module.render_verdict_panel(result_dict)
+
     if args.save_json:
         with open(args.save_json, "w") as f:
             json.dump(result_dict, f, indent=2, default=str)
