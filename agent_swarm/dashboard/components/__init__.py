@@ -8,6 +8,7 @@ from . import (
     live_runner,
     oi_walls,
     price_chart,
+    run_actions,
     verdict_panel,
 )
 
@@ -20,5 +21,6 @@ __all__ = [
     "live_runner",
     "oi_walls",
     "price_chart",
+    "run_actions",
     "verdict_panel",
 ]

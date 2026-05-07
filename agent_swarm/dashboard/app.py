@@ -26,6 +26,7 @@ from agent_swarm.dashboard.components import (
     live_runner,
     oi_walls,
     price_chart,
+    run_actions,
     verdict_panel,
 )
 
@@ -242,6 +243,19 @@ def _page_run_detail(filtered: list[dict]) -> None:
 
 
 def _page_history(filtered: list[dict]) -> None:
+    # If a row was selected, show its action panel at the top
+    selected_path = st.session_state.get("selected_run_path")
+    if selected_path:
+        for m in filtered:
+            if str(m["path"]) == selected_path:
+                try:
+                    data = data_loader.load_run(m["path"])
+                    run_actions.render(m, data)
+                    st.markdown("---")
+                except Exception as exc:
+                    st.error(f"Could not load selected run: {exc}")
+                break
+
     st.markdown("### RUN HISTORY")
     cross_run_stats.render_history_table(filtered)
     st.markdown("---")

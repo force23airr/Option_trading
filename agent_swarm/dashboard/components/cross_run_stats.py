@@ -19,12 +19,46 @@ def _decision_color(d: str) -> str:
     }.get(d, "#6b7280")
 
 
+_DECISION_BADGE = {
+    "approve": ("✓", "#10b981"),
+    "approve_with_reduced_size": ("~", "#f59e0b"),
+    "reject": ("✗", "#ef4444"),
+    "not_evaluated": ("·", "#6b7280"),
+}
+
+
+def _stance_color(stance: str) -> str:
+    s = (stance or "").lower()
+    if "bull" in s:
+        return "#10b981"
+    if "bear" in s:
+        return "#ef4444"
+    return "#7d8590"
+
+
 def render_history_table(runs_meta: list[dict]) -> None:
+    """Custom row renderer with a SELECT button per run.
+
+    Clicking SELECT writes the chosen run path to st.session_state and
+    triggers a rerun so the History page can show the action panel above.
+    """
     if not runs_meta:
         st.caption("No saved runs yet.")
         return
 
-    rows = []
+    # Header row
+    h = st.columns([0.7, 0.9, 1.5, 1.0, 0.9, 1.4, 2.0])
+    h[0].markdown("**SELECT**")
+    h[1].markdown("**TICKER**")
+    h[2].markdown("**WHEN**")
+    h[3].markdown("**CONSENSUS**")
+    h[4].markdown("**DECISION**")
+    h[5].markdown("**STRUCTURE**")
+    h[6].markdown("**BLOCKS**")
+    st.markdown("<hr style='margin:4px 0;border-color:#1f2937;' />", unsafe_allow_html=True)
+
+    selected_path = st.session_state.get("selected_run_path")
+
     for meta in runs_meta:
         try:
             data = data_loader.load_run(meta["path"])
@@ -32,20 +66,41 @@ def render_history_table(runs_meta: list[dict]) -> None:
             continue
         gate = data.get("hard_rules") or (data.get("consensus") or {}).get("hard_rules") or {}
         consensus = data.get("consensus") or {}
-        rows.append({
-            "ticker": meta["ticker"],
-            "when": meta["timestamp"].strftime("%Y-%m-%d %H:%M"),
-            "consensus": str(consensus.get("consensus_stance", "—")).upper(),
-            "conf": f"{(consensus.get('consensus_confidence') or 0) * 100:.0f}%",
-            "decision": str(gate.get("decision", "—")).upper(),
-            "size_x": f"x{gate.get('position_size_multiplier', 0):.2f}",
-            "structure": meta["structure"],
-            "blocks": ", ".join(gate.get("hard_blocks", [])) or "—",
-        })
-    if not rows:
-        st.caption("Could not parse any saved runs.")
-        return
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+        decision = str(gate.get("decision") or "—").lower()
+        badge_char, badge_color = _DECISION_BADGE.get(decision, ("·", "#6b7280"))
+        stance = str(consensus.get("consensus_stance") or "—").upper()
+        stance_color = _stance_color(stance)
+        conf = (consensus.get("consensus_confidence") or 0) * 100
+        size_mult = gate.get("position_size_multiplier") or 0
+        blocks = ", ".join(gate.get("hard_blocks") or []) or "—"
+
+        is_selected = selected_path == str(meta["path"])
+        cols = st.columns([0.7, 0.9, 1.5, 1.0, 0.9, 1.4, 2.0])
+
+        # SELECT button — keyed by path so each row is unique
+        btn_label = "▶ SELECTED" if is_selected else "▶ SELECT"
+        if cols[0].button(btn_label, key=f"select::{meta['path']}", use_container_width=True):
+            if is_selected:
+                st.session_state.pop("selected_run_path", None)
+            else:
+                st.session_state["selected_run_path"] = str(meta["path"])
+            st.rerun()
+
+        cols[1].markdown(f"**{meta['ticker']}**")
+        cols[2].caption(meta["timestamp"].strftime("%Y-%m-%d %H:%M"))
+        cols[3].markdown(
+            f"<span style='color:{stance_color};font-weight:600;'>{stance}</span> "
+            f"<span style='color:#7d8590;font-size:0.85rem;'>{conf:.0f}%</span>",
+            unsafe_allow_html=True,
+        )
+        decision_text = decision.upper() + (f" x{size_mult:.2f}" if 0 < size_mult < 1 else "")
+        cols[4].markdown(
+            f"<span style='color:{badge_color};font-weight:600;'>"
+            f"{badge_char} {decision_text}</span>",
+            unsafe_allow_html=True,
+        )
+        cols[5].caption(meta["structure"])
+        cols[6].caption(blocks if len(blocks) <= 80 else blocks[:77] + "…")
 
 
 def render_gate_firing(runs_meta: list[dict], top_n: int = 10) -> None:
