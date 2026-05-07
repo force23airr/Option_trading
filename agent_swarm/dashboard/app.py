@@ -287,6 +287,16 @@ def main() -> None:
 
     page = st.sidebar.radio("PAGE", ("New run", "Run detail", "History & gates"))
 
+    # Per-trade budget (what-if). 0 disables. Stored in session_state so all
+    # pages can read it; consumed by why_panel + history filtering.
+    st.sidebar.markdown("### MY BUDGET")
+    budget = st.sidebar.number_input(
+        "MAX TICKET COST $", min_value=0, value=int(st.session_state.get("user_budget", 0)),
+        step=20, key="user_budget",
+        help=("Apply your per-trade budget to existing runs. Tickets above this "
+              "show as OVER BUDGET in the WHY panel. 0 = off."),
+    )
+
     if page == "New run":
         _page_new_run()
         return

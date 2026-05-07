@@ -14,6 +14,46 @@ from typing import Iterable
 import streamlit as st
 
 
+def _budget_section(metrics: dict, quant_summary: str) -> str | None:
+    """Compare ticket cost to the user's session-level budget. Returns
+    a section HTML string, or None when no budget is set."""
+    budget = float(st.session_state.get("user_budget", 0) or 0)
+    if budget <= 0:
+        return None
+    ticket_cost = metrics.get("ticket_cost_dollars") or metrics.get("max_loss_dollars")
+    if ticket_cost is None:
+        # No quant ticket — but still tell the user the budget is active
+        body = (
+            f"<span style='color:#7d8590;'>Budget active: "
+            f"<b style='color:#58a6ff;'>${budget:,.0f}</b>/contract — "
+            f"no quant ticket on this run to compare.</span>"
+        )
+        return _section("Budget check", body, accent="#58a6ff")
+    ticket_cost = float(ticket_cost)
+    over = ticket_cost > budget
+    if over:
+        body = (
+            f"<span style='color:#ef4444;font-weight:600;'>✗ OVER BUDGET</span> &nbsp;·&nbsp; "
+            f"ticket cost <b>${ticket_cost:,.0f}</b> exceeds your "
+            f"<b>${budget:,.0f}</b> per-trade cap "
+            f"(by ${ticket_cost - budget:,.0f}, "
+            f"{100*(ticket_cost - budget)/budget:.0f}% over).<br/>"
+            f"<span style='color:#7d8590;font-size:0.82rem;'>"
+            f"No trade for this stock at your preferences. Raise the budget or skip it.</span>"
+        )
+        accent = "#ef4444"
+    else:
+        room = budget - ticket_cost
+        body = (
+            f"<span style='color:#10b981;font-weight:600;'>✓ FITS BUDGET</span> &nbsp;·&nbsp; "
+            f"ticket cost <b>${ticket_cost:,.0f}</b> ≤ your "
+            f"<b>${budget:,.0f}</b> cap "
+            f"(${room:,.0f} of headroom)."
+        )
+        accent = "#10b981"
+    return _section("Budget check", body, accent=accent)
+
+
 def _section(label: str, body_html: str, accent: str = "#10b981") -> str:
     return (
         f'<div style="display:grid;grid-template-columns:160px 1fr;gap:14px;'
@@ -125,6 +165,11 @@ def render(data: dict) -> None:
             + risk_line
         )
         sections.append(_section("Ticket logic", ticket_html, accent="#58a6ff"))
+
+    # 4b. BUDGET CHECK — only when the user has set a per-trade budget
+    budget_html = _budget_section(metrics, quant.get("summary") or "")
+    if budget_html:
+        sections.append(budget_html)
 
     # 5. EVENTS IN WINDOW — only if there are events
     events = event_summary.get("events") or []

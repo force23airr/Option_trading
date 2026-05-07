@@ -382,6 +382,7 @@ def _hard_rules_gate(
     max_bid_ask_spread_pct: float | None = None,
     earnings_reduce_days: int | None = None,
     max_event_risk_score: float | None = None,
+    max_debit_dollars: float | None = None,
     contract_multiplier: float | None = None,
 ) -> dict:
     """Deterministic post-coordinator risk gate.
@@ -406,6 +407,8 @@ def _hard_rules_gate(
         earnings_reduce_days = int(env_val) if env_val is not None else 5
     if max_event_risk_score is None:
         max_event_risk_score = _env_float("SWARM_MAX_EVENT_RISK_SCORE")
+    if max_debit_dollars is None:
+        max_debit_dollars = _env_float("SWARM_MAX_DEBIT_DOLLARS")
 
     hard_blocks: list[str] = []
     adjustments: list[str] = []
@@ -416,6 +419,7 @@ def _hard_rules_gate(
         "max_bid_ask_spread_pct": max_bid_ask_spread_pct,
         "earnings_reduce_days": earnings_reduce_days,
         "max_event_risk_score": max_event_risk_score,
+        "max_debit_dollars": max_debit_dollars,
         "contract_multiplier": contract_multiplier,
     }
 
@@ -453,6 +457,22 @@ def _hard_rules_gate(
             )
     else:
         notes.append("account_size not set; account-loss cap skipped")
+
+    # Per-trade budget cap (user's "I won't pay more than $X for any one ticket")
+    if (
+        max_debit_dollars is not None
+        and max_loss is not None
+        and math.isfinite(max_loss)
+        and max_loss > 0
+        and contract_multiplier
+    ):
+        ticket_cost = max_loss * contract_multiplier
+        metrics["ticket_cost_dollars"] = ticket_cost
+        if ticket_cost > max_debit_dollars:
+            hard_blocks.append(
+                f"ticket cost ${ticket_cost:,.2f} exceeds your per-trade "
+                f"budget of ${max_debit_dollars:,.2f}"
+            )
 
     if max_bid_ask_spread_pct is not None:
         leg_checks, leg_notes = _leg_spread_checks(ctx, ticket, max_bid_ask_spread_pct)
@@ -642,6 +662,7 @@ def run(
     max_bid_ask_spread_pct: float | None = None,
     earnings_reduce_days: int | None = None,
     max_event_risk_score: float | None = None,
+    max_debit_dollars: float | None = None,
     on_event=None,
 ) -> SwarmResult:
     """Run the swarm.
@@ -697,7 +718,14 @@ def run(
     if with_quant and QuantStrategist.should_spawn(ctx):
         emit("quant:start")
         try:
-            quant_view = QuantStrategist().analyze_quant(ctx, peer_views=final_views)
+            quant_view = QuantStrategist().analyze_quant(
+                ctx, peer_views=final_views,
+                max_debit_dollars=(
+                    max_debit_dollars
+                    if max_debit_dollars is not None
+                    else _env_float("SWARM_MAX_DEBIT_DOLLARS")
+                ),
+            )
             emit("quant:done", view=quant_view)
         except Exception as exc:
             emit("quant:error", error=str(exc))
@@ -724,6 +752,7 @@ def run(
         max_bid_ask_spread_pct=max_bid_ask_spread_pct,
         earnings_reduce_days=earnings_reduce_days,
         max_event_risk_score=max_event_risk_score,
+        max_debit_dollars=max_debit_dollars,
     )
     consensus["hard_rules"] = hard_rules
     emit("rules:done", hard_rules=hard_rules)

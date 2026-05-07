@@ -261,7 +261,14 @@ class QuantStrategist(BaseAnalyst):
     def should_spawn(cls, ctx) -> bool:
         return ctx.has_options
 
-    def analyze_quant(self, ctx, peer_views: list[AnalystView] | None = None) -> AnalystView:
+    def analyze_quant(
+        self,
+        ctx,
+        peer_views: list[AnalystView] | None = None,
+        *,
+        max_debit_dollars: float | None = None,
+        contract_multiplier: float = 100.0,
+    ) -> AnalystView:
         candidates = build_candidates(ctx.chain_df, spot=ctx.spot)
         if not candidates:
             return AnalystView(
@@ -270,6 +277,32 @@ class QuantStrategist(BaseAnalyst):
                 summary="No viable defined-risk structures from chain (insufficient strikes/expiries).",
                 provider=self.provider or "", model=self.model or "",
             )
+
+        # Per-trade budget filter — drop any candidate whose dollar risk per
+        # contract exceeds the user's "max I'll pay for one ticket" cap.
+        if max_debit_dollars is not None and max_debit_dollars > 0:
+            budget_max_loss = max_debit_dollars / contract_multiplier
+            kept = [c for c in candidates if c.max_loss <= budget_max_loss]
+            if not kept:
+                cheapest = min(c.max_loss * contract_multiplier for c in candidates)
+                return AnalystView(
+                    analyst=self.name, ticker=ctx.ticker,
+                    stance="neutral", confidence=0.0,
+                    summary=(
+                        f"No eligible ticket for your ${max_debit_dollars:,.0f} per-trade "
+                        f"budget on {ctx.ticker} — cheapest defined-risk structure on the "
+                        f"chain costs ${cheapest:,.0f}/contract. Try raising your budget, "
+                        f"choosing a lower-priced underlying, or accept no-trade."
+                    ),
+                    pattern="(no ticket fits budget)",
+                    observations=[
+                        f"Budget: ${max_debit_dollars:,.0f}/contract",
+                        f"Cheapest candidate: ${cheapest:,.0f}/contract",
+                        f"Candidates considered: {len(candidates)}",
+                    ],
+                    provider=self.provider or "", model=self.model or "",
+                )
+            candidates = kept
 
         peers_block = ""
         if peer_views:

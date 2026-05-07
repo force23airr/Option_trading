@@ -35,6 +35,8 @@ def _build_command(form: dict) -> list[str]:
         cmd.extend(["--account-size", str(form["account_size"])])
     if form["max_loss_pct"]:
         cmd.extend(["--max-loss-pct", str(form["max_loss_pct"])])
+    if form.get("max_debit_dollars"):
+        cmd.extend(["--max-debit-dollars", str(form["max_debit_dollars"])])
     return cmd
 
 
@@ -62,10 +64,16 @@ def render() -> None:
         with_rates = c6.checkbox("with-rates", value=True, help="Treasury yield curve + Macro Rates")
         with_news = c7.checkbox("with-news", value=True, help="headlines + filings + News Analyst")
 
-        c8, _ = st.columns([1, 3])
+        c8, c9, _ = st.columns([1, 1, 2])
         max_loss_pct = c8.number_input("MAX LOSS %", min_value=0.001, max_value=0.5,
                                        value=0.02, step=0.005, format="%.3f",
                                        help="reject trades whose max loss exceeds this fraction of account")
+        max_debit_dollars = c9.number_input(
+            "MAX TICKET COST $", min_value=0, value=0, step=20,
+            help=("hard per-trade budget in dollars per contract — Quant will only "
+                  "consider candidates costing ≤ this amount. 0 disables. "
+                  "Example: 140 means 'never pay more than $140 for one ticket'."),
+        )
 
         go = st.form_submit_button("▶  RUN SWARM", type="primary", use_container_width=True)
 
@@ -81,6 +89,7 @@ def render() -> None:
         "with_options": with_options, "with_events": with_events,
         "with_rates": with_rates, "with_news": with_news,
         "max_loss_pct": float(max_loss_pct),
+        "max_debit_dollars": float(max_debit_dollars) if max_debit_dollars else 0.0,
     }
     cmd = _build_command(form)
 
