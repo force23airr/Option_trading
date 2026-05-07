@@ -70,5 +70,8 @@ def render(data_dict: dict, days: int = 180) -> None:
         height=520, margin=dict(t=30, l=20, r=20, b=20),
         xaxis_rangeslider_visible=False,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        template="plotly_dark",
+        plot_bgcolor="#0b0f14", paper_bgcolor="#0b0f14",
+        font=dict(family="monospace", color="#d6deeb", size=11),
     )
     st.plotly_chart(fig, use_container_width=True)

@@ -77,6 +77,9 @@ def render(data: dict) -> None:
         xaxis=dict(title="Days from today", range=[-1, max((end - today).days for _, end, _ in bars) + 2]),
         yaxis=dict(title=None, autorange="reversed"),
         bargap=0.35,
+        template="plotly_dark",
+        plot_bgcolor="#0b0f14", paper_bgcolor="#0b0f14",
+        font=dict(family="monospace", color="#d6deeb", size=11),
     )
     fig.add_vline(x=0, line_color="#374151", line_dash="dot",
                   annotation_text="today", annotation_position="top")

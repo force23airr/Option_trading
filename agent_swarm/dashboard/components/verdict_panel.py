@@ -62,10 +62,14 @@ def render(data: dict) -> None:
 
     st.markdown(
         f"""
-        <div style="background:{banner_color};color:#fff;padding:14px 18px;
-                    border-radius:8px;font-size:1.15rem;font-weight:600;
-                    margin-bottom:14px;">
-            <span style="opacity:0.85;font-size:0.9rem;">{ticker}</span>
+        <div style="background:transparent;color:{banner_color};
+                    padding:10px 14px;border:1px solid {banner_color};
+                    border-radius:0;font-size:1.0rem;font-weight:600;
+                    margin-bottom:12px;letter-spacing:0.04em;
+                    font-family:monospace;">
+            <span style="color:#7d8590;font-size:0.78rem;letter-spacing:0.1em;">
+              ── {ticker} ── FINAL DISPOSITION ──
+            </span>
             <br/>{banner_text}
         </div>
         """,
@@ -84,15 +88,16 @@ def render(data: dict) -> None:
             with col:
                 st.markdown(
                     f"""
-                    <div style="border-left:4px solid {color};padding:8px 12px;
-                                margin-bottom:6px;background:#f9fafb;border-radius:4px;">
+                    <div style="border-left:3px solid {color};padding:6px 10px;
+                                margin-bottom:4px;background:#11161d;border-radius:0;
+                                font-family:monospace;">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
-                            <strong>{v.get('analyst', '?')}</strong>
-                            <span style="color:{color};font-weight:600;">
+                            <strong style="color:#d6deeb;">{v.get('analyst', '?')}</strong>
+                            <span style="color:{color};font-weight:600;font-size:0.85rem;">
                                 {stance_v} · {conf_v:.0%}
                             </span>
                         </div>
-                        <div style="color:#374151;font-size:0.88rem;margin-top:4px;">
+                        <div style="color:#7d8590;font-size:0.8rem;margin-top:2px;">
                             {_short_summary(v.get('summary', ''))}
                         </div>
                     </div>

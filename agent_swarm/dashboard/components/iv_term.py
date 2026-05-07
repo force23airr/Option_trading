@@ -38,6 +38,9 @@ def render(data: dict) -> None:
         yaxis=dict(title="ATM IV (%)", side="left"),
         yaxis2=dict(title="25Δ skew (%)", overlaying="y", side="right"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        template="plotly_dark",
+        plot_bgcolor="#0b0f14", paper_bgcolor="#0b0f14",
+        font=dict(family="monospace", color="#d6deeb", size=11),
     )
     spread = options_summary.get("iv_rv_spread")
     rv30 = options_summary.get("realized_vol_30d")

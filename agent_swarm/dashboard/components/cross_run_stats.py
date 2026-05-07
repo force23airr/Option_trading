@@ -82,6 +82,9 @@ def render_gate_firing(runs_meta: list[dict], top_n: int = 10) -> None:
         fig.update_layout(
             height=280, margin=dict(t=10, l=20, r=20, b=20),
             xaxis_title=None, yaxis_title="runs",
+            template="plotly_dark",
+            plot_bgcolor="#0b0f14", paper_bgcolor="#0b0f14",
+            font=dict(family="monospace", color="#d6deeb", size=11),
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -102,5 +105,8 @@ def render_gate_firing(runs_meta: list[dict], top_n: int = 10) -> None:
             margin=dict(t=10, l=20, r=20, b=20),
             xaxis_title="times fired", yaxis_title=None,
             yaxis=dict(autorange="reversed"),
+            template="plotly_dark",
+            plot_bgcolor="#0b0f14", paper_bgcolor="#0b0f14",
+            font=dict(family="monospace", color="#d6deeb", size=11),
         )
         st.plotly_chart(fig, use_container_width=True)
