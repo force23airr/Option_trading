@@ -28,6 +28,7 @@ from agent_swarm.dashboard.components import (
     price_chart,
     run_actions,
     verdict_panel,
+    why_panel,
 )
 
 
@@ -207,6 +208,7 @@ def _page_run_detail(filtered: list[dict]) -> None:
         return
 
     verdict_panel.render(data)
+    why_panel.render(data)
 
     tab_chart, tab_events, tab_options, tab_analysts = st.tabs(
         ["PRICE", "EVENTS", "OPTIONS & VOL", "TRANSCRIPTS"]

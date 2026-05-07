@@ -10,6 +10,7 @@ from . import (
     price_chart,
     run_actions,
     verdict_panel,
+    why_panel,
 )
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "price_chart",
     "run_actions",
     "verdict_panel",
+    "why_panel",
 ]
